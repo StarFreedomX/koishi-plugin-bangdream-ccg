@@ -1,0 +1,5 @@
+{
+  "songAllJsonUrl": "https://bestdori.com/api/songs/all.5.json",
+  "songIdJsonUrl": "https://bestdori.com/api/songs/all.1.json",
+  "bandJsonUrl": "https://bestdori.com/api/bands/main.1.json"
+}

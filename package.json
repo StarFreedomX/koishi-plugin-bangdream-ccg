@@ -15,8 +15,10 @@
     "koishi",
     "plugin"
   ],
-  "devDependencies": {},
   "peerDependencies": {
     "koishi": "^4.18.7"
+  },
+  "dependencies": {
+    "xlsx": "^0.18.5"
   }
 }

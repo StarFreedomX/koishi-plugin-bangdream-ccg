@@ -13,6 +13,7 @@
     "moduleResolution": "bundler",
     "jsx": "react-jsx",
     "jsxImportSource": "@satorijs/element",
+    "resolveJsonModule": true,
     "types": [
       "node",
       "yml-register/types"
