@@ -24,28 +24,37 @@ export const Config: Schema<Config> = Schema.object({
 export function apply(ctx: Context, cfg: Config) {
   let isStarted: boolean = false;
   let answers : string[] = [];
+  let selectedBandName : string = '';
+  let selectedKey: string;
+  let selectedSongName : string;
+  let selectedSecond: number
   // write your plugin here
+
+
   ctx.command('猜猜歌 [option:string]')
     .alias('ccg')
     .action(async ({session}, option) => {
       if (!option) {
         if (isStarted) return session.text("已经开始了哦");
         isStarted = true;
-        let selectedKey: string;
+
         do {
           selectedKey = Random.pick(SONG_ID_KEYS);
         } while (selectedKey < "1000");
         let selectedSong = songInfoJson[selectedKey];
         console.log(selectedKey);
         //console.log(selectedSong);
-        let selectedBandName: string = bandIdJson[selectedSong["bandId"]]["bandName"][0];
-        let selectedSongName: string = selectedSong["musicTitle"][0];
+        selectedBandName = bandIdJson[selectedSong["bandId"]]["bandName"][0];
+        selectedSongName = selectedSong["musicTitle"][0];
         let selectedSongLength: number = selectedSong["length"];
-        let selectedSecond: number = Random.int(0, Math.floor(selectedSongLength) - 5);
+        selectedSecond = Random.int(0, Math.floor(selectedSongLength) - 5);
         const songNickname = await readExcelFile(`${assetsUrl}\\nickname_song.xlsx`);
         answers = [selectedSongName];
         let nicknames = songNickname.find(item => item.Id == selectedKey);
-        if (nicknames) answers.concat(nicknames.Nickname.split(','));
+        if (nicknames) nicknames = nicknames.Nickname;
+        console.log(answers);
+        console.log(nicknames);
+        if (nicknames) answers = answers.concat(nicknames.split(','));
 
         console.log(answers);
 
@@ -55,40 +64,46 @@ export function apply(ctx: Context, cfg: Config) {
           `${selectedSecond + cfg.audioLength}`);
         await session.send(h.audio(`${assetsUrl}\\cache\\temp.mp3`));
       }
-      // 设置超时机制
-      let timeoutId: NodeJS.Timeout;
-      const dispose = ctx.on('message', async (session2) => {
-        // 检查是否在当前群组中
-        if (session2.guildId !== session2.guildId) return;
-        //console.log("receive");
-        // 检查回复是否正确
-        if (session2.content == 'ccg stop'){
-          clearTimeout(timeoutId);
-          dispose();
-          await session.send("已停止监听");
-          isStarted=false;
-        }
-        if (session2.content == 'ccg answer'){
-          clearTimeout(timeoutId);
-          dispose();
-          await session.send(`好吧，那么答案是${answers[0]}`);
-          isStarted=false;
-        }
-        if (answers.some(alias => alias == session2.content)) {
-          clearTimeout(timeoutId);
-          dispose(); // 取消监听
-          await session2.send(`恭喜 ${h.quote(session2.messageId)} 猜对了！答案是：${session2.content}`);
-          isStarted = false;
-        }
-      });
+        const dispose = ctx.on('message', async (session) => {
+          // 检查是否在当前群组中
+          if (session.guildId !== session.guildId) return;
+          if (!isStarted) return;
+          //console.log("receive");
+          // 检查回复是否正确
+          if (session.content == 'ccg stop') {
+            dispose();
+            isStarted = false;
+            await session.send("已停止监听")
+            return;
+          }
+          if (session.content == 'ccg answer') {
+            dispose();
+            isStarted = false;
+            await session.send(`好吧，那么答案如下：
+歌曲id:${selectedKey}
+乐队：${selectedBandName}
+歌曲名:${selectedSongName}
+关键词:${answers}
+截取时间点${selectedSecond}s`);
 
-      // 设置超时时间
-      timeoutId = setTimeout(() => {
-        dispose(); // 取消监听
-        session.send(`时间到！答案是：${answers[0]}`);
-      }, 5 * 60 * Time.second);
+          }
+          if (answers.some(alias => alias == session.content)) {
+            dispose(); // 取消监听
+            isStarted = false;
+            await session.send(`${h.quote(session.messageId)} 答案正确！
+歌曲id:${selectedKey}
+乐队：${selectedBandName}
+歌曲名:${selectedSongName}
+关键词:${answers}`);
+
+          }
+        });
+
+
 
     })
+
+
 }
 
 
