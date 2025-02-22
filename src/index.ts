@@ -53,10 +53,10 @@ declare module '@koishijs/cache' {
  *
  *
  *  更多需求：
- *      1.不区分大小写
- *      2.指令添加别名
- *      3.忽略空格
- *      4.忽略全半角
+ *      1.不区分大小写   +
+ *      2.指令添加别名  +
+ *      3.忽略空格      +
+ *      4.忽略全半角     x
  *
  *
  * 具体实现流程：*是否运行中使用缓存2的isCompleted判断
@@ -129,7 +129,7 @@ export interface Config {
   bandIdUrl: string;
   songFileUrl: string
   nickname: boolean;
-  nicknameUrl: string;
+  //nicknameUrl: string;
   defaultSongNameServer: number;
 
 }
@@ -154,7 +154,7 @@ export const Config = Schema.intersect([
     songInfoUrl: Schema.string().default("https://bestdori.com/api/songs/all.7.json").description("歌曲信息地址，默认url来源于bestdori.com"),
     bandIdUrl: Schema.string().default("https://bestdori.com/api/bands/all.1.json").description("乐队信息地址，默认url来源于bestdori.com"),
     songFileUrl: Schema.string().default("https://bestdori.com/assets/jp/sound/bgm{songId}_rip/bgm{songId}.mp3").description("歌曲下载地址，花括号内的songId对应实际的songId被替换"),
-    nicknameUrl: Schema.string().default("https://github.com/Yamamoto-2/tsugu-bangdream-bot/raw/refs/heads/master/backend/config/nickname_song.xlsx").description("别名数据表来源，默认为Tsugu机器人仓库"),
+    //nicknameUrl: Schema.string().default("https://github.com/Yamamoto-2/tsugu-bangdream-bot/raw/refs/heads/master/backend/config/nickname_song.xlsx").description("别名数据表来源，默认为Tsugu机器人仓库"),
   }).description('高级配置'),
 ])
 
@@ -253,7 +253,11 @@ export function apply(ctx: Context, cfg: Config) {
         }
         //这里是正式猜歌流程
         //答案正确
-        if (readySong.answers.some(alias => alias == option)){
+        if (readySong.answers.some(
+          alias => alias.toLowerCase().replace(/\s+/g, '')
+            == option.toLowerCase().replace(/\s+/g, '')
+          )
+        ){
           readySong.isComplete = true;
           ctx.cache.set(`bangdream_ccg_${session.gid}`, 'run', readySong, Time.day);
           return session.text(".answer",{
