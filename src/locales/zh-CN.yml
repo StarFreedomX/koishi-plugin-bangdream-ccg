@@ -1,0 +1,34 @@
+commands:
+  ccg:
+    description: BanG Dream!猜猜歌
+    messages:
+      answer: '答案正确！<br/>
+      歌曲id:{selectedKey}<br/>
+      乐队：{selectedBandName}<br/>
+      歌曲名:{selectedSongName}<br/>
+      关键词:{answers}<br/>
+      截取时间点:{selectedSecond}s'
+      cancel: '游戏已中断'
+      noOptionMessage: '请指定<option>'
+      alreadyRunning: '游戏已经开始了哦'
+    stop:
+      messages:
+        notRunning: '游戏还没有开始哦'
+        stopComplete: '游戏已停止'
+    tips:
+      messages:
+        tips: '提示：乐队是{bandName}'
+        notRunning: '游戏还没有开始哦'
+    answer:
+      messages:
+        answer: '那么答案是：<br/>
+        歌曲id:{selectedKey}<br/>
+      乐队：{selectedBandName}<br/>
+      歌曲名:{selectedSongName}<br/>
+      关键词:{answers}<br/>
+      截取时间点:{selectedSecond}s'
+        notRunning: '游戏还没有开始哦'
+    add:
+      messages:
+        addOptionErr: '格式错误，添加别名的格式为：cck add &#60;id:number&#62; &#60;nickname:string&#62;'
+        songNotFound: '未找到id为{songId}的歌曲'
