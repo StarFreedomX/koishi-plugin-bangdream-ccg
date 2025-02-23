@@ -121,7 +121,7 @@ enum Servers {
 
 export interface Config {
   serverLimit: number;
-  cd: number;
+  //cd: number;
   audioLength: number;
   saveJson: boolean;
   alwaysUseLocalJson: boolean;
@@ -145,7 +145,7 @@ export const Config = Schema.intersect([
       Schema.const(3).description('ZH_CN'),
       Schema.const(4).description('KR'),
     ]).default(0).description("默认歌曲名称服务器，显示答案时默认使用该项配置的服务器歌曲名称"),
-    cd: Schema.number().default(5).description("冷却时间，建议设置为大于5s，否则可能预下载失败"),
+    //cd: Schema.number().default(5).description("冷却时间，建议设置为大于5s，否则可能预下载失败"),
     audioLength: Schema.number().default(5).description("发送音频的长度"),
     nickname: Schema.boolean().default(true).description("是否启用别名匹配"),
     //saveSongFile: Schema.boolean().default(false).description("是否保存歌曲到本地（会占用一定的存储空间，但可以使已下载歌曲无需再次下载，执行速度更快）"),
@@ -219,7 +219,7 @@ export function apply(ctx: Context, cfg: Config) {
           const JSONs = await initJson(cfg);  //初始化json
           console.log('start04');
           if (!readySong) { //这里没有获取到，那么需要生成一个
-            const song = await handleSong(JSONs, ctx, cfg, session.gid.replace(/:/g, '_'));
+            const song = await handleSong(JSONs, ctx, cfg, session.gid.replace(/:/g,'_'));
             //存入缓存2
              ctx.cache.set(`bangdream_ccg_${session.gid}`, 'run', song, Time.day);
             console.log("已存入缓存2:");
@@ -234,7 +234,7 @@ export function apply(ctx: Context, cfg: Config) {
           }
           console.log('start05');
           //发送语音消息
-          const audio = h.audio(`${assetsUrl}\\cache\\temp_${session.gid}.wav`)
+          const audio = h.audio(`${assetsUrl}\\cache\\temp_${session.gid.replace(':','_')}.mp3`)
           console.log('start06');
 
           await session.send(audio);
@@ -397,7 +397,7 @@ export function apply(ctx: Context, cfg: Config) {
       await fetchFileAndSave(songFileUrl, `${assetsUrl}\\cache\\[full]temp.mp3`, ctx)
       await trimAudio(
         `${assetsUrl}\\cache\\[full]temp.mp3`,
-        `${assetsUrl}\\cache\\temp.wav`,
+        `${assetsUrl}\\cache\\temp.mp3`,
         `${song.selectedSecond}`,
         `${song.selectedSecond + cfg.audioLength}`)
       console.log(songFileUrl)
@@ -683,7 +683,7 @@ async function handleSong(JSONs: JSON[], ctx: Context, cfg: Config, gid: string)
   //裁切音频
   await trimAudio(
     `${assetsUrl}\\cache\\[full]temp_${gid}.mp3`,
-    `${assetsUrl}\\cache\\temp_${gid}.wav`,
+    `${assetsUrl}\\cache\\temp_${gid}.mp3`,
     `${song.selectedSecond}`,
     `${song.selectedSecond + cfg.audioLength}`);
   return song;

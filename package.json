@@ -1,7 +1,7 @@
 {
   "name": "koishi-plugin-bangdream-ccg",
   "description": "邦多利猜猜歌，支持缓存和别名机制",
-  "version": "0.0.2",
+  "version": "0.0.8",
   "contributors": [
     "StarFreedomX <starfreedomx@outlook.com>"
   ],
@@ -10,7 +10,9 @@
   "files": [
     "lib",
     "dist",
-    "assets"
+    "assets/bandId.json",
+    "assets/songInfo.json",
+    "assets/nickname_song.xlsx"
   ],
   "license": "MIT",
   "homepage": "https://github.com/StarFreedomX/koishi-plugin-bangdream-ccg",
