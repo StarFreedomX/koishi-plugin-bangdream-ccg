@@ -1,6 +1,6 @@
 {
   "name": "koishi-plugin-bangdream-ccg",
-  "description": "邦多利猜猜歌",
+  "description": "邦多利猜猜歌，支持缓存和别名机制",
   "version": "0.0.2",
   "contributors": [
     "StarFreedomX <starfreedomx@outlook.com>"
@@ -13,10 +13,10 @@
     "assets"
   ],
   "license": "MIT",
-  "homepage": "https://github.com/StarFreedomX/bangdream-ccg",
+  "homepage": "https://github.com/StarFreedomX/koishi-plugin-bangdream-ccg",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/StarFreedomX/bangdream-ccg.git"
+    "url": "git+https://github.com/StarFreedomX/koishi-plugin-bangdream-ccg.git"
   },
   "scripts": {},
   "keywords": [
@@ -31,7 +31,7 @@
   "koishi": {
     "description": {
       "en": "BanG Dream Song Guess Game",
-      "zh": "邦多利猜猜歌"
+      "zh": "邦多利猜猜歌，支持缓存和别名机制"
     },
     "service": {},
     "preview": true,

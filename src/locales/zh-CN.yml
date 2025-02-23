@@ -30,5 +30,12 @@ commands:
         notRunning: '游戏还没有开始哦'
     add:
       messages:
-        addOptionErr: '格式错误，添加别名的格式为：cck add &#60;id:number&#62; &#60;nickname:string&#62;'
+        addOptionErr: '格式错误，添加别名的格式为：cck.add &#60;id:number&#62; &#60;nickname:string&#62;'
         songNotFound: '未找到id为{songId}的歌曲'
+    del:
+      messages:
+        delOptionErr: '格式错误，删除别名的格式为：cck.del &#60;id:number&#62; &#60;nickname:string&#62;'
+        songNotFound: '未找到id为{songId}的歌曲'
+    clear:
+      messages:
+        delCompleted: '数据库缓存已清除！'
