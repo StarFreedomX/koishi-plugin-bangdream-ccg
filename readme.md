@@ -1,9 +1,34 @@
 # koishi-plugin-bangdream-ccg
 
-[![npm](https://img.shields.io/npm/v/koishi-plugin-bangdream-ccg?style=flat-square)](https://www.npmjs.com/package/koishi-plugin-bangdream-ccg)
+[![npm](https://img.shields.io/npm/v/koishi-plugin-bangdream-ccg?style=flat-square)](https://www.npmjs.com/package/koishi-plugin-bangdream-ccg) [![npm](https://img.shields.io/npm/l/koishi-plugin-bangdream-ccg?style=flat-square)](https://www.npmjs.com/package/koishi-plugin-bangdream-ccg) [![npm](https://img.shields.io/npm/dt/koishi-plugin-bangdream-ccg?style=flat-square)](https://www.npmjs.com/package/koishi-plugin-bangdream-ccg)
 
-邦多利猜猜歌<br/>
-目前只在单个群聊做过测试<br/>
-如果遇到assets中的nickname_song.xlsx丢失需要自行下载<br/>
-可以前往此仓库也可以去茨菇的仓库下载<del>(我就是拿的茨菇的,快说谢谢kumo)</del><br>([https://github.com/Yamamoto-2/tsugu-bangdream-bot/raw/refs/heads/master/backend/config/nickname_song.xlsx](https://github.com/Yamamoto-2/tsugu-bangdream-bot/raw/refs/heads/master/backend/config/nickname_song.xlsx))
-<br/>支持添加别名，所以用一阵子就能积累好多了（
+*邦多利猜猜歌*
+
+## 注意事项
+
+* 本项目需提前安装并配置FFmpeg，官网[Builds - CODEX FFMPEG @ gyan.dev](https://www.gyan.dev/ffmpeg/builds/)
+* 目前只在单个群聊做过测试
+* 如果遇到assets中的nickname_song.xlsx丢失需要自行到本仓库下载
+* 不要随意删除cache的文件，如果由于文件未找到而报错，可以手动前往数据库或通过指令ccg.clear清除缓存
+
+## List To Do
+
+* [X]  增加别名删除功能
+* [X]  指令清空数据库缓存
+* [X]  指令描述、用法
+* [ ]  增加歌曲保存功能
+
+## Thanks
+
+本项目开发时参考以下项目，在此致谢
+
+
+| 项目                              | 传送门                                   |
+| --------------------------------- | ---------------------------------------- |
+| koishi-plugin-waifu               | [🔗项目地址](https://bestdori.com/)      |
+| koishi-plugin-tsugu-bangdream-bot | [🔗项目地址](https://bandoristation.com) |
+| koishi-plugin-BanGDreamCardGuess  | [🔗项目地址](https://bandoristation.com) |
+
+本项目的默认歌曲数据和乐队数据均来源于[🔗bestdori](https://bestdori.com/)
+
+歌曲别名数据来源于Tsugu机器人仓库[🔗nickname_song.xlsx](https://github.com/Yamamoto-2/tsugu-bangdream-bot/raw/refs/heads/master/backend/config/nickname_song.xlsx)
