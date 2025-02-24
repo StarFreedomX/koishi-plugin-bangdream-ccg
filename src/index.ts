@@ -754,7 +754,7 @@ async function addNickname(songId: number, title: string, nickname: string) {
       // 否则，在找到的位置插入新对象
       nicknameJson.splice(index, 0, appending);
     }
-    return '别名添加成功';
+
 
   }
   const newWorksheet = XLSX.utils.json_to_sheet(nicknameJson, {skipHeader: false});
@@ -772,7 +772,7 @@ async function addNickname(songId: number, title: string, nickname: string) {
   //newWorksheet['!cols'][0] = { wch: 10, align: { horizontal: 'right' } };
   console.log(newWorksheet);
   XLSX.writeFile(workbook, assetsUrl + "\\nickname_song.xlsx")
-
+  return '别名添加成功';
   /*
     // 读取 Excel 文件
     const workbook = XLSX.readFile('example.xlsx');
