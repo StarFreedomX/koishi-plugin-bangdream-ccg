@@ -367,9 +367,13 @@ export function apply(ctx: Context, cfg: Config) {
     .example('ccg.list 1 : 查看id为1的歌曲的别名列表')
     .action(async ({session}, songId) => {
       if (!songId) {
+        return "请指定歌曲id";
+      }
+      const answers = (await getNicknames(songId)).toString()
+      if (!answers) {
         return session.text(".songNotFound",{songId: songId});
       }
-      console.log(await getNicknames(songId));
+      //console.log(await getNicknames(songId));
       return session.text(".returnList", {
         songId: songId,
         answers: (await getNicknames(songId)).toString(),
@@ -377,8 +381,8 @@ export function apply(ctx: Context, cfg: Config) {
     })
 
   //测试
-  ctx.command("test [option:text]")
-    .action(async ({session}, option) => {
+  //ctx.command("test [option:text]")
+    //.action(async ({session}, option) => {
       //await init();
       //测试readExcelFile读取后的json内容
       //console.log(await readExcelFile("E:\\MyKoishiCode\\bangdream-ccg\\external\\bangdream-ccg\\assets\\nickname_song.xlsx"))
@@ -434,7 +438,7 @@ export function apply(ctx: Context, cfg: Config) {
       //console.log(a);
       //console.log(b);
       //console.log(c);
-    });
+    //});
 
 
   /*
