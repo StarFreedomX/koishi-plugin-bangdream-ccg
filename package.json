@@ -1,7 +1,7 @@
 {
   "name": "koishi-plugin-bangdream-ccg",
   "description": "邦多利猜猜歌，支持缓存和别名机制",
-  "version": "0.0.8",
+  "version": "0.0.10",
   "contributors": [
     "StarFreedomX <starfreedomx@outlook.com>"
   ],

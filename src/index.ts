@@ -123,6 +123,7 @@ export interface Config {
   serverLimit: number;
   //cd: number;
   audioLength: number;
+  idGuess: boolean;
   saveJson: boolean;
   alwaysUseLocalJson: boolean;
   songInfoUrl: string;
@@ -147,6 +148,7 @@ export const Config = Schema.intersect([
     ]).default(0).description("默认歌曲名称服务器，显示答案时默认使用该项配置的服务器歌曲名称"),
     //cd: Schema.number().default(5).description("冷却时间，建议设置为大于5s，否则可能预下载失败"),
     audioLength: Schema.number().default(5).description("发送音频的长度"),
+    idGuess: Schema.boolean().default(true).description("是否允许使用歌曲id猜歌"),
     nickname: Schema.boolean().default(true).description("是否启用别名匹配"),
     //saveSongFile: Schema.boolean().default(false).description("是否保存歌曲到本地（会占用一定的存储空间，但可以使已下载歌曲无需再次下载，执行速度更快）"),
     saveJson: Schema.boolean().default(true).description("是否保存json至本地（这使得由于网络波动等原因获取json文件失败时，使用本地json）"),
@@ -293,6 +295,7 @@ export function apply(ctx: Context, cfg: Config) {
         selectedSecond: readySong.selectedSecond,
       })
     })
+
   ctx.command('ccg.stop')
     .usage('结束游戏')
     .action(async ({session}) => {
@@ -359,6 +362,24 @@ export function apply(ctx: Context, cfg: Config) {
       return session.text('.delCompleted');
     })
 
+  ctx.command("ccg.list <songId:number>")
+    .usage('根据id查看别名列表')
+    .example('ccg.list 1 : 查看id为1的歌曲的别名列表')
+    .action(async ({session}, songId) => {
+      if (!songId) {
+        return "请指定歌曲id";
+      }
+      const answers = (await getNicknames(songId)).toString()
+      if (!answers) {
+        return session.text(".songNotFound",{songId: songId});
+      }
+      //console.log(await getNicknames(songId));
+      return session.text(".returnList", {
+        songId: songId,
+        answers: (await getNicknames(songId)).toString(),
+      })
+    })
+
   //测试
   //ctx.command("test [option:text]")
     //.action(async ({session}, option) => {
@@ -411,6 +432,12 @@ export function apply(ctx: Context, cfg: Config) {
       ])
       map.forEach((key) => {})*/
       //return await delNickName(1,'114514')
+      //const a = ['a','b'];
+      //const b = [];
+      //const c = a.concat(b);
+      //console.log(a);
+      //console.log(b);
+      //console.log(c);
     //});
 
 
@@ -520,19 +547,13 @@ async function getSongInfoById(selectedKey: string, songInfoJson: JSON, bandIdJs
   const selectedSongName = selectedSong["musicTitle"][cfg.defaultSongNameServer];
   const selectedSongLength: number = selectedSong["length"];
   let selectedSecond = Random.int(0, Math.floor(selectedSongLength) - cfg.audioLength);
-  const songNickname = await readExcelFile(`${assetsUrl}\\nickname_song.xlsx`);
   let answers = [selectedSongName];
-  let nicknamesExcelItem = songNickname.find(item => item.Id == Number(selectedKey));
-
-
-  if (nicknamesExcelItem) {     //有对应Id的行
-    //获取对应行的Nickname，可能有也可能是undefined
-    const nicknames = nicknamesExcelItem.Nickname;
-    //检测是否已经存在nicknames
-    if (nicknames) {
-      answers = answers.concat(nicknames.split(','));
-    }
+  if(cfg.idGuess){
+    answers = answers.concat(selectedKey);
   }
+
+  answers = answers.concat(await getNicknames(Number(selectedKey)));
+
   const songInfo: Song = {
     bandId: selectedSong["bandId"].toString(),
     bandName: selectedBandName,
@@ -736,8 +757,17 @@ async function addNickname(songId: number, title: string, nickname: string) {
   let appendSong = nicknameJson.find(item => item.Id == songId);
 
   if (appendSong) {
-    console.log(appendSong);
-    appendSong.Nickname = appendSong.Nickname ? appendSong.Nickname + ',' + nickname : nickname;
+    //console.log(appendSong);
+    //appendSong.Nickname = appendSong.Nickname ? appendSong.Nickname + ',' + nickname : nickname;
+    if (appendSong.Nickname) {
+      if (appendSong.Nickname.split(',').some(item => item === nickname)) {
+        return "别名已存在!";
+      } else {
+        appendSong.Nickname += `,${nickname}`;
+      }
+    }else{
+      appendSong.Nickname = nickname;
+    }
     console.log(appendSong);
   } else {
     const index = nicknameJson.findIndex(item => item.Id > songId);
@@ -754,7 +784,7 @@ async function addNickname(songId: number, title: string, nickname: string) {
       // 否则，在找到的位置插入新对象
       nicknameJson.splice(index, 0, appending);
     }
-    return '别名添加成功';
+
 
   }
   const newWorksheet = XLSX.utils.json_to_sheet(nicknameJson, {skipHeader: false});
@@ -772,7 +802,7 @@ async function addNickname(songId: number, title: string, nickname: string) {
   //newWorksheet['!cols'][0] = { wch: 10, align: { horizontal: 'right' } };
   console.log(newWorksheet);
   XLSX.writeFile(workbook, assetsUrl + "\\nickname_song.xlsx")
-
+  return '别名添加成功';
   /*
     // 读取 Excel 文件
     const workbook = XLSX.readFile('example.xlsx');
@@ -831,6 +861,24 @@ async function addNickname(songId: number, title: string, nickname: string) {
   // 保存文件
     XLSX.writeFile(workbook, 'example_modified.xlsx');
     console.log('文件已保存');*/
+}
+
+async function getNicknames(songId: number) {
+  const songNickname = await readExcelFile(`${assetsUrl}\\nickname_song.xlsx`);
+  let answers: string[] = [];
+  let nicknamesExcelItem = songNickname.find(item => item.Id == Number(songId));
+
+
+  if (nicknamesExcelItem) {     //有对应Id的行
+    //获取对应行的Nickname，可能有也可能是undefined
+    const nicknames = nicknamesExcelItem.Nickname;
+    //检测是否已经存在nicknames
+    if (nicknames) {
+      answers = nicknames.split(',');
+    }
+  }
+
+  return answers;
 }
 
 /**
