@@ -80,8 +80,14 @@ export const name = 'bangdream-ccg';
 export const usage = `
 <h1>邦多利猜猜歌</h1>
 <h2>歌曲数据来源于bestdori.com</h2>
-<h2>Notice</h2>
+
 <h4>开发中，有问题可以到GitHub提issue<del>(114514年后才会解决)</del></h4>
+<h2>Notice</h2>
+* 本项目需提前安装并配置FFmpeg
+* 目前只在单个群聊做过测试
+* 如果遇到assets中的nickname_song.xlsx丢失需要自行到本仓库下载
+* 不要随意删除cache的文件，如果由于文件未找到而报错，可以手动前往数据库或通过指令ccg.clear清除缓存
+
 <h2>Thanks</h2>
 <h4>开发过程中参考插件koishi-plugin-cck(作者kumoSleeping)</h4>
 `
