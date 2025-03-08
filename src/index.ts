@@ -1,9 +1,9 @@
-import {Context, h, Random, Schema, sleep, Time} from 'koishi'
+import {Context, h, Random, Schema, Time} from 'koishi'
 import {exec} from "child_process";
 import * as XLSX from 'xlsx';
 import {} from '@koishijs/cache'
 import * as fs from 'fs'
-import {json} from "node:stream/consumers";
+//import {json} from "node:stream/consumers";
 //import * as songInfoJson from '../assets/songInfo.json';
 //import * as bandIdJson from '../assets/bandId.json';
 //import path from "path";
@@ -21,12 +21,13 @@ declare module '@koishijs/cache' {
 /**
  * 具体实现思路（参考kumo的cck）：
  * 初始化：
- *        从Tsugu仓库获取nickname_song.xlsx(只下载一次，后续全用本地的)
+ *        从Tsugu仓库获取nickname_song.xlsx(只下载一次，后续全用本地的)(暂未实现)
  *
  * 每次触发：
  *    start:
  *        判断是否已经开始
  *        如果已经开始，直接return
+ *
  *        如果未开始，那么执行下列步骤
  *        从bestdori获取bandId.json、songInfo.json
  *        将对象1的属性复制到对象2中，并将对象2存入缓存的表为"bangdream_ccg_{gid}"的key为run的项中
@@ -53,10 +54,10 @@ declare module '@koishijs/cache' {
  *
  *
  *  更多需求：
- *      1.不区分大小写   +
- *      2.指令添加别名  +
- *      3.忽略空格      +
- *      4.忽略全半角     x
+ *      1.不区分大小写   y
+ *      2.指令添加别名  y
+ *      3.忽略空格      y
+ *      4.忽略全半角     y
  *
  *
  * 具体实现流程：*是否运行中使用缓存2的isCompleted判断
@@ -80,8 +81,21 @@ export const name = 'bangdream-ccg';
 export const usage = `
 <h1>邦多利猜猜歌</h1>
 <h2>歌曲数据来源于bestdori.com</h2>
-<h2>Notice</h2>
+
 <h4>开发中，有问题可以到GitHub提issue<del>(114514年后才会解决)</del></h4>
+<h2>Notice</h2>
+* 本项目需提前安装并配置FFmpeg
+* 目前只在单个群聊做过测试
+* 如果遇到assets中的nickname_song.xlsx丢失需要自行到本仓库下载
+* 不要随意删除cache的文件，如果由于文件未找到而报错，可以手动前往数据库或通过指令ccg.clear清除缓存
+
+<h2>Advanced</h2>
+关于配置项songFileId,占位符如下：
+{songName}=>歌曲名
+{songId}=>歌曲id
+{bandName}=>乐队名
+{bandId}=>乐队id
+
 <h2>Thanks</h2>
 <h4>开发过程中参考插件koishi-plugin-cck(作者kumoSleeping)</h4>
 `
@@ -99,10 +113,6 @@ export interface Song {
   selectedSecond: number;
   answers: string[];
   isComplete: boolean;
-}
-
-export interface limitInfo {
-
 }
 
 export interface nicknameExcelElement {
@@ -544,10 +554,10 @@ async function getSongInfoById(selectedKey: string, songInfoJson: JSON, bandIdJs
   //乐队名
   const selectedBandName = bandIdJson[selectedSong["bandId"]]["bandName"][0];
   //歌曲名
-  const selectedSongName = selectedSong["musicTitle"][cfg.defaultSongNameServer];
+  const selectedSongNames = selectedSong["musicTitle"];
   const selectedSongLength: number = selectedSong["length"];
   let selectedSecond = Random.int(0, Math.floor(selectedSongLength) - cfg.audioLength);
-  let answers = [selectedSongName];
+  let answers = selectedSongNames.filter((item: string) => item != null && item != "");
   if(cfg.idGuess){
     answers = answers.concat(selectedKey);
   }
@@ -558,7 +568,7 @@ async function getSongInfoById(selectedKey: string, songInfoJson: JSON, bandIdJs
     bandId: selectedSong["bandId"].toString(),
     bandName: selectedBandName,
     songId: selectedKey,
-    songName: selectedSongName,
+    songName: selectedSongNames[cfg.defaultSongNameServer],
     songLength: selectedSongLength,
     selectedSecond: selectedSecond,
     answers: answers,
@@ -598,7 +608,7 @@ async function getRandomSong(songInfoJson: JSON, bandIdJson: JSON, cfg: Config):
  * @param url json文件的url
  */
 async function fetchJson(url: string): Promise<JSON> {
-  try {
+  //try {
     // 发起网络请求并等待响应
     const response = await fetch(url);
 
@@ -609,10 +619,10 @@ async function fetchJson(url: string): Promise<JSON> {
 
     // 解析 JSON 数据并返回
     return await response.json();
-  } catch (error) {
+  //} catch (error) {
     // 处理错误情况
-    throw new Error(`Fetching and parsing JSON error:\n${error}`);
-  }
+    //throw new Error(`Fetching and parsing JSON error:\n${error}`);
+  //}
 }
 
 /**
@@ -648,7 +658,7 @@ async function fetchFileAndSave(fileUrl: string, localPath: string, ctx: Context
  */
 async function runCommand(command: string) {
   return new Promise<void>((resolve, reject) => {
-    exec(command, (error, stdout, stderr) => {
+    exec(command, (error/*, stdout, stderr*/) => {
       if (error) {
         console.error(`Command error: ${error}`);
         reject(error);
@@ -731,8 +741,7 @@ async function readExcelFile(filePath: string): Promise<nicknameExcelElement[]> 
   // 获取工作表
   const worksheet = workbook.Sheets[sheetName];
   // 将工作表转换为JSON并返回
-  const output: nicknameExcelElement[] = XLSX.utils.sheet_to_json(worksheet);
-  return output;
+  return XLSX.utils.sheet_to_json(worksheet);
 }
 
 /**
@@ -863,6 +872,10 @@ async function addNickname(songId: number, title: string, nickname: string) {
     console.log('文件已保存');*/
 }
 
+/**
+ * 根据歌曲id获取别名列表
+ * @param songId 歌曲id
+ */
 async function getNicknames(songId: number) {
   const songNickname = await readExcelFile(`${assetsUrl}\\nickname_song.xlsx`);
   let answers: string[] = [];
@@ -1010,11 +1023,10 @@ function turnSongFileUrl(song: Song, cfg: Config): string {
  * @param cfg
  */
 async function detectedXlsx(ctx: Context, cfg:Config){
-  //检查nickname_song.xlsx，如果没有，那么下载
+  //检查nickname_song.xlsx
   const fs = require('fs');
   if (!fs.existsSync(`${assetsUrl}\\nickname_song.xlsx`)) {
     console.error("未找到nickname_song.xlsx文件")
-    return;
   }
 }
 
