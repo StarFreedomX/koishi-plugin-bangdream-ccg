@@ -3,11 +3,7 @@ import {exec} from "child_process";
 import * as XLSX from 'xlsx';
 import {} from '@koishijs/cache'
 import * as fs from 'fs'
-//import {json} from "node:stream/consumers";
-//import * as songInfoJson from '../assets/songInfo.json';
-//import * as bandIdJson from '../assets/bandId.json';
-//import path from "path";
-//import {clearTimeout} from "node:timers";
+
 
 export const inject = ['cache']
 
@@ -119,6 +115,7 @@ export interface nicknameExcelElement {
   Id: number;
   Title: string;
   Nickname: string;
+  '这列写备注（吐槽），C列的内容如果有中文逗号会像这样标红': string
 }
 
 enum Servers {
@@ -135,6 +132,7 @@ export interface Config {
   audioLength: number;
   idGuess: boolean;
   saveJson: boolean;
+  timeout: number;
   alwaysUseLocalJson: boolean;
   songInfoUrl: string;
   bandIdUrl: string;
@@ -158,6 +156,7 @@ export const Config = Schema.intersect([
     ]).default(0).description("默认歌曲名称服务器，显示答案时默认使用该项配置的服务器歌曲名称"),
     //cd: Schema.number().default(5).description("冷却时间，建议设置为大于5s，否则可能预下载失败"),
     audioLength: Schema.number().default(5).description("发送音频的长度"),
+    timeout: Schema.number().default(300).description("猜歌超时时间，单位秒"),
     idGuess: Schema.boolean().default(true).description("是否允许使用歌曲id猜歌"),
     nickname: Schema.boolean().default(true).description("是否启用别名匹配"),
     //saveSongFile: Schema.boolean().default(false).description("是否保存歌曲到本地（会占用一定的存储空间，但可以使已下载歌曲无需再次下载，执行速度更快）"),
@@ -175,6 +174,7 @@ export const Config = Schema.intersect([
 
 export function apply(ctx: Context, cfg: Config) {
   ctx.i18n.define('zh-CN', require('./locales/zh-CN'))
+
 
 
   /*async function init() {
@@ -204,10 +204,12 @@ export function apply(ctx: Context, cfg: Config) {
 
   ctx.command("ccg [option:text]")
     .alias("猜猜歌")
-    .usage('发送ccg开始猜歌游戏，发送ccg [option:text]参与猜歌')
+    .usage('发送ccg开始猜歌游戏，发送消息参与猜歌，如果')
     .example('ccg : 开始猜歌游戏')
-    .example('ccg Fire Bird : 猜歌曲是"Fire Bird"')
-    .example('ccg 秋妈妈 : 猜歌曲是"秋妈妈"')
+    .example('Fire Bird : 猜歌曲是"Fire Bird"')
+    .example('秋妈妈 : 猜歌曲是"秋妈妈"')
+    .example('1 : 猜歌曲id是1的歌曲')
+    .example('ccg.add -h : 查询ccg add子指令')
     .action(async ({session}, option) => {
       if (!session) {
         return;
@@ -251,6 +253,48 @@ export function apply(ctx: Context, cfg: Config) {
 
           await session.send(audio);
           console.log('start07');
+          //这里加入监听代码
+          const dispose = ctx.channel(session.channelId).middleware(async (session, next) => {
+            if (readySong.answers.some(alias => betterDistinguish(alias) == betterDistinguish(session.content))) {
+              dispose();
+              disposeTimer();
+              console.log('complete')
+              await ctx.cache.delete(`bangdream_ccg_${session.gid}`, 'run');
+              await session.send(session.text("commands.ccg.messages.answer",{
+                selectedKey: readySong.songId,
+                selectedBandName: readySong.bandName,
+                selectedSongName: readySong.songName,
+                answers: readySong.answers.toString(),
+                selectedSecond: readySong.selectedSecond,
+              }))
+            } else {
+              return next();
+            }
+          })
+
+          const disposeTimer = ctx.setTimeout(async () => {
+            /*if (games[session.channelId]) {
+              dispose()
+              games[session.channelId] = false
+              await session.send(`${config.phrase_timeout}${nicknames[7]}\n${h.image(image, "image/jpeg")}`)
+            }*/
+            let readySong: Song = await ctx.cache.get(`bangdream_ccg_${session.gid}`, 'run');
+            if (readySong && !readySong.isComplete) {
+              await ctx.cache.delete(`bangdream_ccg_${session.gid}`, 'run');
+              dispose();
+              await session.send(session.text("commands.ccg.messages.timeout",{
+                selectedKey: readySong.songId,
+                selectedBandName: readySong.bandName,
+                selectedSongName: readySong.songName,
+                answers: readySong.answers.toString(),
+                selectedSecond: readySong.selectedSecond,
+              }));
+            }
+          }, cfg.timeout * 1000)
+
+
+
+
           //这里已经发送完毕，缓存2已经准备好了题目的信息
           //接下来需要处理的是缓存1，提前准备好下一次的题目
           const preSong = await handleSong(JSONs, ctx, cfg, session.gid.replace(/:/g,'_'));
@@ -262,6 +306,7 @@ export function apply(ctx: Context, cfg: Config) {
           return session.text('.alreadyRunning');
         }
       }else{
+        /*
         //带了参数，是猜歌的
         //先判断是否已经结束猜歌
         let readySong: Song  = await ctx.cache.get(`bangdream_ccg_${session.gid}`, 'run');
@@ -272,8 +317,9 @@ export function apply(ctx: Context, cfg: Config) {
         //这里是正式猜歌流程
         //答案正确
         if (readySong.answers.some(alias => betterDistinguish(alias) == betterDistinguish(option))){
-          readySong.isComplete = true;
-          ctx.cache.set(`bangdream_ccg_${session.gid}`, 'run', readySong, Time.day);
+          //readySong.isComplete = true;
+          //ctx.cache.set(`bangdream_ccg_${session.gid}`, 'run', readySong, Time.day);
+          await ctx.cache.delete(`bangdream_ccg_${session.gid}`, 'run');
           return session.text(".answer",{
             selectedKey: readySong.songId,
             selectedBandName: readySong.bandName,
@@ -281,8 +327,11 @@ export function apply(ctx: Context, cfg: Config) {
             answers: readySong.answers.toString(),
             selectedSecond: readySong.selectedSecond,
           })
-        }
+        }*/
+
       }
+
+
 
 
     });
@@ -295,8 +344,9 @@ export function apply(ctx: Context, cfg: Config) {
       if (!readySong || readySong.isComplete) {
         return session.text(".notRunning");
       }
-      readySong.isComplete = true;
-      await ctx.cache.set(`bangdream_ccg_${session.gid}`, 'run',readySong, Time.day);
+      //readySong.isComplete = true;
+      //await ctx.cache.set(`bangdream_ccg_${session.gid}`, 'run',readySong, Time.day);
+      await ctx.cache.delete(`bangdream_ccg_${session.gid}`, 'run');
       return session.text('.answer', {
         selectedKey: readySong.songId,
         selectedBandName: readySong.bandName,
@@ -315,8 +365,9 @@ export function apply(ctx: Context, cfg: Config) {
       if (!readySong || readySong.isComplete) {
         return session.text(".notRunning");
       }
-      readySong.isComplete = true;
-      await ctx.cache.set(`bangdream_ccg_${session.gid}`, 'run', readySong, Time.day);
+      //readySong.isComplete = true;
+      //await ctx.cache.set(`bangdream_ccg_${session.gid}`, 'run', readySong, Time.day);
+      await ctx.cache.delete(`bangdream_ccg_${session.gid}`, 'run');
       return session.text('.stopComplete')
     });
 
@@ -785,6 +836,7 @@ async function addNickname(songId: number, title: string, nickname: string) {
       Id: songId,
       Title: title,
       Nickname: nickname,
+      '这列写备注（吐槽），C列的内容如果有中文逗号会像这样标红': ''
     }
     // 如果没有找到更大的Id，说明应该添加到数组末尾
     if (index === -1) {
@@ -806,7 +858,7 @@ async function addNickname(songId: number, title: string, nickname: string) {
     newWorksheet['!cols'] = [];
   }
   //列宽
-  newWorksheet['!cols'].push({wch: 10}, {wch: 50}, {wch: 150});
+  newWorksheet['!cols'].push({wch: 10}, {wch: 50}, {wch: 65},{wch: 55});
   //右对齐
   //newWorksheet['!cols'][0] = { wch: 10, align: { horizontal: 'right' } };
   console.log(newWorksheet);
@@ -938,7 +990,7 @@ async function delNickName(songId: number, nickname: string) {
     newWorksheet['!cols'] = [];
   }
   //列宽
-  newWorksheet['!cols'].push({wch: 10}, {wch: 50}, {wch: 150});
+  newWorksheet['!cols'].push({wch: 10}, {wch: 50}, {wch: 65},{wch: 55});
   //右对齐
   //newWorksheet['!cols'][0] = { wch: 10, align: { horizontal: 'right' } };
   console.log(newWorksheet);
@@ -1035,6 +1087,7 @@ async function detectedXlsx(ctx: Context, cfg:Config){
  * @param str
  */
 function betterDistinguish(str: string) {
+  str += '';
   str = str.toLowerCase().replace(/\s+/g, '');
   const reflectMap: Map<string, string> = new Map([
     ['，', ','],
@@ -1060,9 +1113,9 @@ function betterDistinguish(str: string) {
   ]);
 
   reflectMap.forEach((value: string, key: string) => {
-    console.log(`key: ${key} ; value: ${value}`);
+    //console.log(`key: ${key} ; value: ${value}`);
     const regex = new RegExp(`${key}`,'g');
-    console.log(regex);
+    //console.log(regex);
     str = str.replace(regex, value);
   })
   console.log(str)

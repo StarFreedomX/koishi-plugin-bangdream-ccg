@@ -8,6 +8,12 @@ commands:
       歌曲名:{selectedSongName}<br/>
       关键词:{answers}<br/>
       截取时间点:{selectedSecond}s'
+      timeout: '时间到！正确答案是：<br/>
+      歌曲id:{selectedKey}<br/>
+      乐队：{selectedBandName}<br/>
+      歌曲名:{selectedSongName}<br/>
+      关键词:{answers}<br/>
+      截取时间点:{selectedSecond}s'
       cancel: '游戏已中断'
       noOptionMessage: '请指定<option>'
       alreadyRunning: '游戏已经开始了哦'
