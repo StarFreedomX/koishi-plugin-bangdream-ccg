@@ -416,7 +416,29 @@ export function apply(ctx: Context, cfg: Config) {
         return session.text(".notRunning");
       }
       const runningSong: Song = await ctx.cache.get(`bangdream_ccg_${session.gid}`, 'run');
-      return session.text(".tips",{bandName: runningSong.bandName});
+
+      const tips = runningSong.tips;
+      console.log(tips);
+      if (!tips) {
+        return session.text(".noMoreTips");
+      }
+      const newTips = [];
+      const selectedIndex = Random.int(tips.length);
+      let selectedElement = undefined;
+      for (let i = 0; i < tips.length; i++) {
+        if (i == selectedIndex) {
+          selectedElement = tips[i];
+          continue;
+        }
+        newTips.push(tips[i]);
+      }
+      runningSong.tips = newTips;
+      await ctx.cache.set(`bangdream_ccg_${session.gid}`,'run', runningSong);
+
+      if (!selectedElement) {
+        return session.text(".noMoreTips");
+      }
+      return session.text(".tips",{tips: selectedElement});
     })
 
   ctx.command("ccg.clear")
@@ -620,17 +642,25 @@ async function getSongInfoById(selectedKey: string, songInfoJson: JSON, bandIdJs
 
   answers = answers.concat(await getNicknames(Number(selectedKey)));
 
-  const songLevel = selectedSong["difficulty"]["3"]["playLevel"];
-  const songBpm = selectedSong["bpm"]["3"]["bpm"];
-  const songTag = selectedSong["tag"];
-  let songTime = selectedSong["publishedAt"][0];
-  let server = 0;
-  while(!songTime){
-    server++
-    songTime = selectedSong["publishedAt"][[]];
+  const songExpertLevel : number = selectedSong["difficulty"]["3"]["playLevel"];
+  const songBpm : number = selectedSong["bpm"]["3"][0]["bpm"];
+  const songTag :string = selectedSong["tag"];
+  const songTimeArray = selectedSong["publishedAt"];
+  let server = cfg.serverLimit;
+  console.log(`server: ${server}`);
+  const serverName = ['日服','国际服','台服','国服','韩服'];
+  let songTime : string = '';
+  for (let i = 0; server && i < 5; i++) {
+    if (server%2 && songTimeArray[i]){
+      //console.log('server:+++++++++++'+server);
+      const newDate = new Date(Number(songTimeArray[i]));
+      //console.log(newDate);
+      songTime += (`${serverName[i]}发布时间:${newDate.getFullYear()}年\n`);
+    }
+    server = server >> 1;
   }
-  const songDate: Date = new Date();
-  const songTips: string[] = [];
+  const songTips: string[] = [`乐队:${selectedBandName}`,`EX谱面难度:${songExpertLevel}`,`Bpm:${songBpm}`, `歌曲类型:${songTag}`, `${songTime}`];
+
 
 
   const songInfo: Song = {

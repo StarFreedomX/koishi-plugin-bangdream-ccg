@@ -23,8 +23,9 @@ commands:
         stopComplete: '游戏已停止'
     tips:
       messages:
-        tips: '提示：乐队是{bandName}'
+        tips: '提示：{tips}'
         notRunning: '游戏还没有开始哦'
+        noMoreTips: '已经没有更多提示啦'
     answer:
       messages:
         answer: '那么答案是：<br/>
