@@ -109,6 +109,7 @@ export interface Song {
   selectedSecond: number;
   answers: string[];
   isComplete: boolean;
+  tips: string[];
 }
 
 export interface nicknameExcelElement {
@@ -204,7 +205,7 @@ export function apply(ctx: Context, cfg: Config) {
 
   ctx.command("ccg [option:text]")
     .alias("猜猜歌")
-    .usage('发送ccg开始猜歌游戏，发送消息参与猜歌，如果')
+    .usage('发送ccg开始猜歌游戏，发送消息参与猜歌')
     .example('ccg : 开始猜歌游戏')
     .example('Fire Bird : 猜歌曲是"Fire Bird"')
     .example('秋妈妈 : 猜歌曲是"秋妈妈"')
@@ -255,7 +256,11 @@ export function apply(ctx: Context, cfg: Config) {
           console.log('start07');
           //这里加入监听代码
           const dispose = ctx.channel(session.channelId).middleware(async (session, next) => {
-            if (readySong.answers.some(alias => betterDistinguish(alias) == betterDistinguish(session.content))) {
+            const readySong = await ctx.cache.get(`bangdream_ccg_${session.gid}`, 'run');
+            if(!readySong){
+              dispose();
+              return next();
+            }else if(readySong.answers.some(alias => betterDistinguish(alias) == betterDistinguish(session.content))) {
               dispose();
               disposeTimer();
               console.log('complete')
@@ -615,6 +620,19 @@ async function getSongInfoById(selectedKey: string, songInfoJson: JSON, bandIdJs
 
   answers = answers.concat(await getNicknames(Number(selectedKey)));
 
+  const songLevel = selectedSong["difficulty"]["3"]["playLevel"];
+  const songBpm = selectedSong["bpm"]["3"]["bpm"];
+  const songTag = selectedSong["tag"];
+  let songTime = selectedSong["publishedAt"][0];
+  let server = 0;
+  while(!songTime){
+    server++
+    songTime = selectedSong["publishedAt"][[]];
+  }
+  const songDate: Date = new Date();
+  const songTips: string[] = [];
+
+
   const songInfo: Song = {
     bandId: selectedSong["bandId"].toString(),
     bandName: selectedBandName,
@@ -624,6 +642,7 @@ async function getSongInfoById(selectedKey: string, songInfoJson: JSON, bandIdJs
     selectedSecond: selectedSecond,
     answers: answers,
     isComplete: false,
+    tips: songTips
   };
   console.log(answers);
   console.log(selectedKey);
