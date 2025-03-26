@@ -178,31 +178,6 @@ export function apply(ctx: Context, cfg: Config) {
   ctx.i18n.define('zh-CN', require('./locales/zh-CN'))
 
 
-  /*async function init() {
-    //初始化json
-    /*const songInfoJson: JSON = await ctx.http.get(cfg.songInfoUrl);
-    const bandIdJson: JSON = await ctx.http.get(cfg.bandIdUrl);
-    fs.writeFileSync(__dirname + "/songInfo.json", JSON.stringify(songInfoJson, null, 2));
-    fs.writeFileSync(__dirname + "/bandId.json", JSON.stringify(bandIdJson, null, 2));*/
-  /*const nicknamePath: string = __dirname + "/nickname_song.xlsx"
-  try {
-    if (fs.existsSync(nicknamePath)) {
-      console.log(`文件已存在，跳过下载: ${nicknamePath}`);
-      return;
-    } else {
-      console.log("待下载：" + cfg.nicknameUrl)
-      const response = await ctx.http.get(cfg.nicknameUrl);
-      console.log("download success");
-      // 将文件内容写入本地
-      fs.writeFileSync(nicknamePath, Buffer.from(response, 'binary'));
-      console.log(`文件已保存到: ${nicknamePath}`);
-    }
-  } catch (error) {
-    console.error('下载文件时出错:', error.message);
-  }
-
-}*/
-
   ctx.command("ccg [option:text]")
     .alias("猜猜歌")
     .usage('发送ccg开始猜歌游戏，发送消息参与猜歌')
@@ -288,11 +263,7 @@ export function apply(ctx: Context, cfg: Config) {
           })
 
           const disposeTimer = ctx.setTimeout(async () => {
-            /*if (games[session.channelId]) {
-              dispose()
-              games[session.channelId] = false
-              await session.send(`${config.phrase_timeout}${nicknames[7]}\n${h.image(image, "image/jpeg")}`)
-            }*/
+
             let readySong: Song = await ctx.cache.get(`bangdream_ccg_${session.gid}`, 'run');
             if (readySong && !readySong.isComplete) {
               await ctx.cache.delete(`bangdream_ccg_${session.gid}`, 'run');
@@ -812,64 +783,7 @@ async function addNickname(songId: number, title: string, nickname: string) {
   //console.log(newWorksheet);
   XLSX.writeFile(workbook, assetsUrl + "\\nickname_song.xlsx")
   return '别名添加成功';
-  /*
-    // 读取 Excel 文件
-    const workbook = XLSX.readFile('example.xlsx');
-    const sheetName = workbook.SheetNames[0]; // 获取第一个工作表的名称
-    const worksheet = workbook.Sheets[sheetName];
 
-  // 将工作表转换为 JSON 格式
-    const data = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
-
-  // 找到标题行，确定列索引
-    let idColIndex, titleColIndex, nicknameColIndex;
-    const headerRow = data[0];
-    headerRow.forEach((header, index) => {
-      if (header === 'id') idColIndex = index;
-      if (header === 'Title') titleColIndex = index;
-      if (header === 'Nickname') nicknameColIndex = index;
-    });
-
-  // 检查是否找到所有必要的列
-    if (idColIndex === undefined || titleColIndex === undefined || nicknameColIndex === undefined) {
-      throw new Error('未找到必要的列（id, Title, Nickname）');
-    }
-
-  // 查找或创建对应的行
-    let found = false;
-    for (let i = 1; i < data.length; i++) {
-      const row = data[i];
-      const currentId = row[idColIndex];
-      if (currentId === songId) {
-        // 找到对应的行，追加 Nickname
-        let currentNickname = row[nicknameColIndex] || '';
-        if (currentNickname) {
-          currentNickname += `,${nickname}`;
-        } else {
-          currentNickname = nickname;
-        }
-        row[nicknameColIndex] = currentNickname;
-        found = true;
-        break;
-      }
-    }
-
-  // 如果未找到对应的行，创建新行
-    if (!found) {
-      const newRow = Array(headerRow.length).fill(''); // 创建与标题行相同长度的空行
-      newRow[idColIndex] = songId;
-      newRow[titleColIndex] = title;
-      newRow[nicknameColIndex] = nickname;
-      data.push(newRow);
-    }
-
-  // 将修改后的数据写回工作表
-    const newWorksheet = XLSX.utils.json_to_sheet(data, { skipHeader: true });
-    workbook.Sheets[sheetName] = newWorksheet;
-
-  // 保存文件
-    XLSX.writeFile(workbook, 'example_modified.xlsx');
-    console.log('文件已保存');*/
 }
 
 /**
