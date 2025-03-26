@@ -30,7 +30,7 @@ declare module '@koishijs/cache' {
  *        从bestdori获取bandId.json、songInfo.json
  *        将对象1的属性复制到对象2中，并将对象2存入缓存的表为"bangdream_ccg_{gid}"的key为run的项中
  *        发送temp.mp3
- *        修改isStarted为true
+ *        修改isStarted为true//ps:最新版本采用直接删除
  *        监听回复(reply流程)
  *        同时
  *        {
@@ -55,16 +55,21 @@ declare module '@koishijs/cache' {
  *      插件运行->收到ccg指令->是否运行中--否->检查是否存在nickname_song.xlsx--有->获取json->检查缓存01是否有歌曲--无->随机一首歌放到缓存02区
  *                            └-是->已经在运行中           └-无->报错                    └-有->01复制一份到02->发送缓存02的歌曲片段<-┘
  *                                                                                        随机一首歌放到01缓存<-┘
- *      插件运行->收到ccg [option]->是否运行中--是->option是否符合answer--是->发送成功消息，设置缓存2的isCompleted为true
- *                                  └-否->不在运行中      └-否->不回答
+ *      插件运行->收到ccg [option]->是否运行中--是->//待实现
+ *                                  └-否->不在运行中
  *
- *      插件运行->收到ccg.stop->是否运行中--是->发送停止消息，设置isCompleted为true
+ *      插件运行->收到ccg.stop->是否运行中--是->发送停止消息，释放缓存
  *                              └-否->不在运行中
  *
- *      插件运行->收到ccg.stop->是否运行中--是->发送答案，设置isCompleted为true
+ *      插件运行->收到ccg.answer->是否运行中--是->发送答案，释放缓存
  *                              └-否->不在运行中
  *
  *      插件运行->收到ccg.add->执行addNickname()，输出返回值添加成功/失败
+ *
+ *      插件运行->收到ccg.tips->是否运行中--是->执行提示代码，输出
+ *                              └-否->不在运行中
+ *
+ *      插件运行->收到ccg.clear->删除数据库缓存->返回消息
  *
  */
 export const name = 'bangdream-ccg';
@@ -213,9 +218,9 @@ export function apply(ctx: Context, cfg: Config) {
 
       //没有带参数，进入启动流程
       if (!option) {
-        console.log('start01');
+        //console.log('start01');
         detectedXlsx(ctx, cfg);
-        console.log('start02');
+        //console.log('start02');
         //start
         //获取是否在进行中
         let runSongInfo = await ctx.cache.get(`bangdream_ccg_${session.gid}`, 'run');
@@ -224,15 +229,20 @@ export function apply(ctx: Context, cfg: Config) {
 
           //判断缓存1是否有歌曲，如果没有，那么先生成在发送，存入缓存2；如果有，直接发送，并将缓存1的内容转移到缓存2
           let readySong = await ctx.cache.get(`bangdream_ccg_${session.gid}`, 'pre');
-          console.log('start03');
+          //console.log('start03');
           session.send("语音发送中...")
           const JSONs = await initJson(cfg);  //初始化json
-          console.log('start04');
-          if (!readySong) { //这里没有获取到，那么需要生成一个
+          //console.log('start04');
+          const existCache = await detectFileExist(`${assetsUrl}\\cache\\[full]temp_${session.gid.replace(/:/g, '_')}.mp3`) &&
+            await detectFileExist(`${assetsUrl}\\cache\\temp_${session.gid.replace(/:/g, '_')}.mp3`);
+          //console.log(existCache);
+          if (!readySong || !existCache) { //这里没有获取到缓存1的内容，那么需要生成一个直接放到缓存2
             const song = await handleSong(JSONs, ctx, cfg, session.gid.replace(/:/g, '_'));
             //存入缓存2
             ctx.cache.set(`bangdream_ccg_${session.gid}`, 'run', song, Time.day);
-            console.log("已存入缓存2:");
+            console.log(`缓存情况:${!!readySong}`);
+            console.log(`文件情况:${existCache}`);
+            console.log("已生成并存入缓存2:");
             console.log(song);
           } else {
             //读取缓存1的内容
@@ -242,13 +252,18 @@ export function apply(ctx: Context, cfg: Config) {
             console.log("已存入缓存2:");
             console.log(preSong);
           }
-          console.log('start05');
-          //发送语音消息
-          const audio = h.audio(`${assetsUrl}\\cache\\temp_${session.gid.replace(':', '_')}.mp3`)
-          console.log('start06');
+          //console.log('start05');
+          //try {
+            //发送语音消息
+            const audio = h.audio(`${assetsUrl}\\cache\\temp_${session.gid.replace(':', '_')}.mp3`)
+            //console.log('start06');
 
-          await session.send(audio);
-          console.log('start07');
+            await session.send(audio);
+            console.log('发送成功');
+          //}catch (error){
+           // console.error(error);
+          //}
+          //console.log('start07');
           //这里加入监听代码
           const dispose = ctx.channel(session.channelId).middleware(async (session, next) => {
             const readySong = await ctx.cache.get(`bangdream_ccg_${session.gid}`, 'run');
@@ -258,7 +273,7 @@ export function apply(ctx: Context, cfg: Config) {
             } else if (readySong.answers.some(alias => betterCompare(alias, session.content))) {
               dispose();
               disposeTimer();
-              console.log('complete')
+              //console.log('complete')
               await ctx.cache.delete(`bangdream_ccg_${session.gid}`, 'run');
               await session.send(session.text("commands.ccg.messages.answer", {
                 selectedKey: readySong.songId,
@@ -304,28 +319,7 @@ export function apply(ctx: Context, cfg: Config) {
           return session.text('.alreadyRunning');
         }
       } else {
-        /*
-        //带了参数，是猜歌的
-        //先判断是否已经结束猜歌
-        let readySong: Song  = await ctx.cache.get(`bangdream_ccg_${session.gid}`, 'run');
-        if (!readySong || readySong.isComplete) {
-          console.log("还没开始")
-          return;
-        }
-        //这里是正式猜歌流程
-        //答案正确
-        if (readySong.answers.some(alias => betterDistinguish(alias) == betterDistinguish(option))){
-          //readySong.isComplete = true;
-          //ctx.cache.set(`bangdream_ccg_${session.gid}`, 'run', readySong, Time.day);
-          await ctx.cache.delete(`bangdream_ccg_${session.gid}`, 'run');
-          return session.text(".answer",{
-            selectedKey: readySong.songId,
-            selectedBandName: readySong.bandName,
-            selectedSongName: readySong.songName,
-            answers: readySong.answers.toString(),
-            selectedSecond: readySong.selectedSecond,
-          })
-        }*/
+
 
       }
 
@@ -409,7 +403,7 @@ export function apply(ctx: Context, cfg: Config) {
         const runningSong: Song = await ctx.cache.get(`bangdream_ccg_${session.gid}`, 'run');
 
         const tips = runningSong.tips;
-        console.log(tips);
+        //console.log(tips);
         if (!tips) {
           return session.text(".noMoreTips");
         }
@@ -502,9 +496,17 @@ export function apply(ctx: Context, cfg: Config) {
     })
 
   //测试
-  /*ctx.command("test [option:text]")
+  ctx.command("test [option:text]")
   .action(async ({session}, option) => {
-  });*/
+    fs.mkdir(`${ctx.baseDir}\\data\\bangdream-ccg\\`,() => {})
+    fs.copyFile(`${assetsUrl}\\nickname_song.xlsx`,
+      `${ctx.baseDir}\\data\\bangdream-ccg\\nickname_song.xlsx`,
+      () => {
+        console.log('复制完成')
+      });
+    return ctx.baseDir;
+  });
+  //console.log('加载插件。');
 }
 
 /**
@@ -519,7 +521,7 @@ export function apply(ctx: Context, cfg: Config) {
 async function getSongInfoById(selectedKey: string, songInfoJson: JSON, bandIdJson: JSON, cfg: Config): Promise<Song> {
   //获取歌曲信息
   const selectedSong = songInfoJson[selectedKey];
-  console.log(selectedKey);
+  //console.log(selectedKey);
   //console.log(selectedSong);
   //乐队名
   const selectedBandName = bandIdJson[selectedSong["bandId"]]["bandName"][0];
@@ -539,7 +541,7 @@ async function getSongInfoById(selectedKey: string, songInfoJson: JSON, bandIdJs
   const songTag: string = selectedSong["tag"];
   const songTimeArray = selectedSong["publishedAt"];
   let server = cfg.serverLimit;
-  console.log(`server: ${server}`);
+  //console.log(`server: ${server}`);
   const serverName = ['日服', '国际服', '台服', '国服', '韩服'];
   let songTime: string = '';
   for (let i = 0; server && i < 5; i++) {
@@ -565,8 +567,8 @@ async function getSongInfoById(selectedKey: string, songInfoJson: JSON, bandIdJs
     isComplete: false,
     tips: songTips
   };
-  console.log(answers);
-  console.log(selectedKey);
+  //console.log(answers);
+  //console.log(selectedKey);
   return songInfo;
 
 }
@@ -633,12 +635,12 @@ async function fetchFileAndSave(fileUrl: string, localPath: string, ctx: Context
   const arrayBuffer = await ctx.http.get(fileUrl, config);
   const buffer = Buffer.from(arrayBuffer);
   // 检查目录是否存在，不存在则创建
-  console.log(localPath);
+  //console.log(localPath);
   const dir = localPath.substring(0, localPath.lastIndexOf('\\'));
-  console.log(dir);
+  //console.log(dir);
   await fs.promises.mkdir(dir, {recursive: true});
   fs.writeFileSync(localPath, buffer);
-  console.log('文件下载完成');
+  //console.log('文件下载完成');
 
   //console.log('test02')
 }
@@ -672,7 +674,7 @@ async function writeJSON(jsonString: string, path: string) {
     if (err) {
       console.error(`Error writing JSON to ${path}`, err);
     } else {
-      console.log('JSON data is written to file');
+      //console.log('JSON data is written to file');
     }
   });
 }
@@ -774,7 +776,7 @@ async function addNickname(songId: number, title: string, nickname: string) {
     } else {
       appendSong.Nickname = nickname;
     }
-    console.log(appendSong);
+    //console.log(appendSong);
   } else {
     const index = nicknameJson.findIndex(item => item.Id > songId);
 
@@ -807,7 +809,7 @@ async function addNickname(songId: number, title: string, nickname: string) {
   newWorksheet['!cols'].push({wch: 10}, {wch: 50}, {wch: 65}, {wch: 55});
   //右对齐
   //newWorksheet['!cols'][0] = { wch: 10, align: { horizontal: 'right' } };
-  console.log(newWorksheet);
+  //console.log(newWorksheet);
   XLSX.writeFile(workbook, assetsUrl + "\\nickname_song.xlsx")
   return '别名添加成功';
   /*
@@ -939,7 +941,7 @@ async function delNickName(songId: number, nickname: string) {
   newWorksheet['!cols'].push({wch: 10}, {wch: 50}, {wch: 65}, {wch: 55});
   //右对齐
   //newWorksheet['!cols'][0] = { wch: 10, align: { horizontal: 'right' } };
-  console.log(newWorksheet);
+  //console.log(newWorksheet);
   XLSX.writeFile(workbook, assetsUrl + "\\nickname_song.xlsx")
   return '别名删除成功！';
 }
@@ -962,7 +964,7 @@ async function initJson(cfg: Config) {
       try {
         songInfoJson = await fetchJson(cfg.songInfoUrl);
         bandIdJson = await fetchJson(cfg.bandIdUrl);
-        console.log('读取json文件完成')
+        //console.log('读取json文件完成')
         if (cfg.saveJson) {
           writeJSON(JSON.stringify(songInfoJson), assetsUrl + '\\songInfo.json');
           writeJSON(JSON.stringify(bandIdJson), assetsUrl + '\\bandId.json');
@@ -978,7 +980,7 @@ async function initJson(cfg: Config) {
       //获取json
       songInfoJson = await fetchJson(cfg.songInfoUrl);
       bandIdJson = await fetchJson(cfg.bandIdUrl);
-      console.log('读取json文件完成')
+      //console.log('读取json文件完成')
       //保存副本到本地
       //程序运行到此处已经成功读取了json
       // 写入文件(函数内已经做了异常处理)
@@ -1070,4 +1072,12 @@ function betterDistinguish(str: string) {
 
 function betterCompare(str1: string, str2:string): boolean {
   return betterDistinguish(str1) == betterDistinguish(str2);
+}
+
+async function detectFileExist(url: string) {
+  return new Promise((resolve) => {
+    fs.access(url, fs.constants.F_OK, (err) => {
+      resolve(!err);
+    })
+  })
 }
