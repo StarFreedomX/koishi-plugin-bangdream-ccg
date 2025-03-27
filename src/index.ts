@@ -20,6 +20,7 @@ declare module '@koishijs/cache' {
  * 具体实现思路（参考kumo的cck）：
  * 初始化：
  *        从Tsugu仓库获取nickname_song.xlsx(只下载一次，后续全用本地的)(暂未实现)
+ *        检测插件目录是否有nickname_song.xlsx，若有，将插件目录下的nickname_song.xlsx移动到data中持久保存
  *
  * 每次触发：
  *    start:
@@ -96,8 +97,11 @@ export const usage = `
 <h4>开发过程中参考插件koishi-plugin-cck(作者kumoSleeping)</h4>
 `
 
-export const assetsUrl = `${__dirname}\\..\\assets`;
-
+export const assetsUrl : string = `${__dirname}/../assets`;
+/*
+export let cacheUrl : string;
+export let dataUrl : string;
+*/
 //export const SONG_ID_KEYS = Object.keys(songInfoJson);
 
 export interface Song {
@@ -177,7 +181,15 @@ export const Config = Schema.intersect([
 export function apply(ctx: Context, cfg: Config) {
   ctx.i18n.define('zh-CN', require('./locales/zh-CN'))
 
+  //初始化，检测当前的应用目录
+  /*dataUrl = `${ctx.baseDir}/data/bangdream-ccg/`;
+  cacheUrl = `${ctx.baseDir}/cache/bangdream-ccg/`;
+  fs.mkdirSync(dataUrl, {recursive: true});
+  fs.mkdirSync(cacheUrl, {recursive: true});
+  console.log('目录初始化成功');
 
+  fs.copyFileSync(`${assetsUrl}/nickname_song.xlsx`, `${dataUrl}/nickname_song.xlsx`);
+*/
   ctx.command("ccg [option:text]")
     .alias("猜猜歌")
     .usage('发送ccg开始猜歌游戏，发送消息参与猜歌')
@@ -208,8 +220,8 @@ export function apply(ctx: Context, cfg: Config) {
           session.send("语音发送中...")
           const JSONs = await initJson(cfg);  //初始化json
           //console.log('start04');
-          const existCache = await detectFileExist(`${assetsUrl}\\cache\\[full]temp_${session.gid.replace(/:/g, '_')}.mp3`) &&
-            await detectFileExist(`${assetsUrl}\\cache\\temp_${session.gid.replace(/:/g, '_')}.mp3`);
+          const existCache = await detectFileExist(`${assetsUrl}/cache/[full]temp_${session.gid.replace(/:/g, '_')}.mp3`) &&
+            await detectFileExist(`${assetsUrl}/cache/temp_${session.gid.replace(/:/g, '_')}.mp3`);
           //console.log(existCache);
           if (!readySong || !existCache) { //这里没有获取到缓存1的内容，那么需要生成一个直接放到缓存2
             const song = await handleSong(JSONs, ctx, cfg, session.gid.replace(/:/g, '_'));
@@ -230,7 +242,7 @@ export function apply(ctx: Context, cfg: Config) {
           //console.log('start05');
           //try {
             //发送语音消息
-            const audio = h.audio(`${assetsUrl}\\cache\\temp_${session.gid.replace(':', '_')}.mp3`)
+            const audio = h.audio(`${assetsUrl}/cache/temp_${session.gid.replace(':', '_')}.mp3`)
             //console.log('start06');
 
             await session.send(audio);
@@ -467,17 +479,10 @@ export function apply(ctx: Context, cfg: Config) {
     })
 
   //测试
-  ctx.command("test [option:text]")
+  /*ctx.command("test [option:text]")
   .action(async ({session}, option) => {
-    fs.mkdir(`${ctx.baseDir}\\data\\bangdream-ccg\\`,() => {})
-    fs.copyFile(`${assetsUrl}\\nickname_song.xlsx`,
-      `${ctx.baseDir}\\data\\bangdream-ccg\\nickname_song.xlsx`,
-      () => {
-        console.log('复制完成')
-      });
-    return ctx.baseDir;
-  });
-  //console.log('加载插件。');
+  });*/
+
 }
 
 /**
@@ -607,7 +612,7 @@ async function fetchFileAndSave(fileUrl: string, localPath: string, ctx: Context
   const buffer = Buffer.from(arrayBuffer);
   // 检查目录是否存在，不存在则创建
   //console.log(localPath);
-  const dir = localPath.substring(0, localPath.lastIndexOf('\\'));
+  const dir = localPath.substring(0, localPath.lastIndexOf('/'));
   //console.log(dir);
   await fs.promises.mkdir(dir, {recursive: true});
   fs.writeFileSync(localPath, buffer);
@@ -678,13 +683,13 @@ async function handleSong(JSONs: JSON[], ctx: Context, cfg: Config, gid: string)
   //转换为实际歌曲文件地址
   const songFileUrl = turnSongFileUrl(song, cfg);
   //保存文件
-  await fetchFileAndSave(songFileUrl, `${assetsUrl}\\cache\\[full]temp_${gid}.mp3`, ctx);
+  await fetchFileAndSave(songFileUrl, `${assetsUrl}/cache/[full]temp_${gid}.mp3`, ctx);
   const FFmpegPath = cfg.FFmpegPath ? cfg.FFmpegPath : 'ffmpeg.exe';
   if (FFmpegPath) {}
   //裁切音频
   await trimAudio(FFmpegPath,
-    `${assetsUrl}\\cache\\[full]temp_${gid}.mp3`,
-    `${assetsUrl}\\cache\\temp_${gid}.mp3`,
+    `${assetsUrl}/cache/[full]temp_${gid}.mp3`,
+    `${assetsUrl}/cache/temp_${gid}.mp3`,
     `${song.selectedSecond}`,
     `${song.selectedSecond + cfg.audioLength}`);
   return song;
@@ -722,7 +727,7 @@ async function readExcelFile(filePath: string): Promise<nicknameExcelElement[]> 
  */
 async function addNickname(songId: number, title: string, nickname: string) {
   // 读取Excel文件
-  const workbook = XLSX.readFile(assetsUrl + '\\nickname_song.xlsx');
+  const workbook = XLSX.readFile(assetsUrl + '/nickname_song.xlsx');
   // 获取第一个工作表的名字
   const sheetName = workbook.SheetNames[0];
   // 获取工作表
@@ -781,7 +786,7 @@ async function addNickname(songId: number, title: string, nickname: string) {
   //右对齐
   //newWorksheet['!cols'][0] = { wch: 10, align: { horizontal: 'right' } };
   //console.log(newWorksheet);
-  XLSX.writeFile(workbook, assetsUrl + "\\nickname_song.xlsx")
+  XLSX.writeFile(workbook, assetsUrl + "/nickname_song.xlsx")
   return '别名添加成功';
 
 }
@@ -791,7 +796,7 @@ async function addNickname(songId: number, title: string, nickname: string) {
  * @param songId 歌曲id
  */
 async function getNicknames(songId: number) {
-  const songNickname = await readExcelFile(`${assetsUrl}\\nickname_song.xlsx`);
+  const songNickname = await readExcelFile(`${assetsUrl}/nickname_song.xlsx`);
   let answers: string[] = [];
   let nicknamesExcelItem = songNickname.find(item => item.Id == Number(songId));
 
@@ -815,7 +820,7 @@ async function getNicknames(songId: number) {
  */
 async function delNickName(songId: number, nickname: string) {
   // 读取Excel文件
-  const workbook = XLSX.readFile(assetsUrl + '\\nickname_song.xlsx');
+  const workbook = XLSX.readFile(assetsUrl + '/nickname_song.xlsx');
   // 获取第一个工作表的名字
   const sheetName = workbook.SheetNames[0];
   // 获取工作表
@@ -856,7 +861,7 @@ async function delNickName(songId: number, nickname: string) {
   //右对齐
   //newWorksheet['!cols'][0] = { wch: 10, align: { horizontal: 'right' } };
   //console.log(newWorksheet);
-  XLSX.writeFile(workbook, assetsUrl + "\\nickname_song.xlsx")
+  XLSX.writeFile(workbook, assetsUrl + "/nickname_song.xlsx")
   return '别名删除成功！';
 }
 
@@ -870,8 +875,8 @@ async function initJson(cfg: Config) {
   //json处理操作
   if (cfg.alwaysUseLocalJson) {
     try {
-      songInfoJson = require(assetsUrl + "\\songInfo.json");
-      bandIdJson = require(assetsUrl + "\\bandId.json");
+      songInfoJson = require(assetsUrl + "/songInfo.json");
+      bandIdJson = require(assetsUrl + "/bandId.json");
     } catch (e) {
       console.error("读取本地json文件异常，将从远程仓库获取");
       console.error(e);
@@ -880,8 +885,8 @@ async function initJson(cfg: Config) {
         bandIdJson = await fetchJson(cfg.bandIdUrl);
         //console.log('读取json文件完成')
         if (cfg.saveJson) {
-          writeJSON(JSON.stringify(songInfoJson), assetsUrl + '\\songInfo.json');
-          writeJSON(JSON.stringify(bandIdJson), assetsUrl + '\\bandId.json');
+          writeJSON(JSON.stringify(songInfoJson), assetsUrl + '/songInfo.json');
+          writeJSON(JSON.stringify(bandIdJson), assetsUrl + '/bandId.json');
         }
       } catch (e) {
         console.error("远程Json文件获取异常");
@@ -899,15 +904,15 @@ async function initJson(cfg: Config) {
       //程序运行到此处已经成功读取了json
       // 写入文件(函数内已经做了异常处理)
       if (cfg.saveJson) {
-        writeJSON(JSON.stringify(songInfoJson), assetsUrl + '\\songInfo.json');
-        writeJSON(JSON.stringify(bandIdJson), assetsUrl + '\\bandId.json');
+        writeJSON(JSON.stringify(songInfoJson), assetsUrl + '/songInfo.json');
+        writeJSON(JSON.stringify(bandIdJson), assetsUrl + '/bandId.json');
       }
     } catch (e) {
       console.error("Json文件获取异常，将使用本地json");
       console.error(e);
       try {
-        songInfoJson = require(assetsUrl + "\\songInfo.json");
-        bandIdJson = require(assetsUrl + "\\bandId.json");
+        songInfoJson = require(assetsUrl + "/songInfo.json");
+        bandIdJson = require(assetsUrl + "/bandId.json");
       } catch (e) {
         console.error("读取本地json文件异常");
         console.error(e);
@@ -939,7 +944,7 @@ function turnSongFileUrl(song: Song, cfg: Config): string {
 async function detectedXlsx(ctx: Context, cfg: Config) {
   //检查nickname_song.xlsx
   const fs = require('fs');
-  if (!fs.existsSync(`${assetsUrl}\\nickname_song.xlsx`)) {
+  if (!fs.existsSync(`${assetsUrl}/nickname_song.xlsx`)) {
     console.error("未找到nickname_song.xlsx文件")
   }
 }
