@@ -10,8 +10,6 @@
   "files": [
     "lib",
     "dist",
-    "assets/bandId.json",
-    "assets/songInfo.json",
     "assets/nickname_song.xlsx"
   ],
   "license": "MIT",
