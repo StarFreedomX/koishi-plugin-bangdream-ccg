@@ -120,7 +120,17 @@ export interface nicknameExcelElement {
   Id: number;
   Title: string;
   Nickname: string;
-  '这列写备注（吐槽），C列的内容如果有中文逗号会像这样标红': string
+}
+
+export interface nicknameJson{
+  [songId: string]: nicknameJsonElement;
+}
+
+export interface nicknameJsonElement {
+    title: string;
+    nicknames: string[];
+    //这个ignore是用来记录仓库别名的删除数据的，因为不会直接操作仓库别名，所以在更新时具有持久性
+    nicknamesIgnore: string[];
 }
 
 enum Servers {
@@ -188,7 +198,13 @@ export function apply(ctx: Context, cfg: Config) {
   fs.mkdirSync(cacheUrl, {recursive: true});
   console.log('目录初始化成功');
 
-  fs.copyFileSync(`${assetsUrl}/nickname_song.xlsx`, `${dataUrl}/nickname_song.xlsx`);
+  //console.log(fs.existsSync(`${assetsUrl}/nickname_song.xlsx`))
+  if (fs.existsSync(`${assetsUrl}/nickname_song.xlsx`)){
+    console.log('copying & removing')
+    fs.copyFileSync(`${assetsUrl}/nickname_song.xlsx`, `${dataUrl}/nickname_song.xlsx`);
+    //fs.copyFileSync(`${assetsUrl}/nickname_song.xlsx`, `${assetsUrl}/nickname_song.xlsx`);
+    fs.rmSync(`${assetsUrl}/nickname_song.xlsx`);
+  }
 
 
 
@@ -209,7 +225,7 @@ export function apply(ctx: Context, cfg: Config) {
       //没有带参数，进入启动流程
       if (!option) {
         //console.log('start01');
-        detectedXlsx(ctx, cfg);
+        //detectedXlsx(ctx, cfg);
         //console.log('start02');
         //start
         //获取是否在进行中
@@ -223,8 +239,8 @@ export function apply(ctx: Context, cfg: Config) {
           session.send("语音发送中...")
           const JSONs = await initJson(cfg);  //初始化json
           //console.log('start04');
-          const existCache = await detectFileExist(`${cacheUrl}/[full]temp_${session.gid.replace(/:/g, '_')}.mp3`) &&
-            await detectFileExist(`${cacheUrl}/temp_${session.gid.replace(/:/g, '_')}.mp3`);
+          const existCache = fs.existsSync(`${cacheUrl}/[full]temp_${session.gid.replace(/:/g, '_')}.mp3`) &&
+            fs.existsSync(`${cacheUrl}/temp_${session.gid.replace(/:/g, '_')}.mp3`);
           //console.log(existCache);
           if (!readySong || !existCache) { //这里没有获取到缓存1的内容，那么需要生成一个直接放到缓存2
             const song = await handleSong(JSONs, ctx, cfg, session.gid.replace(/:/g, '_'));
@@ -375,7 +391,7 @@ export function apply(ctx: Context, cfg: Config) {
       if (!songInfo) {
         return session.text(".songNotFound", {songId: songId});
       }
-      return await delNickName(songId, nickname);
+      return await delNickName(songId, nickname, songInfo);
     })
 
   ctx.command("ccg.tips [option:text]")
@@ -470,21 +486,24 @@ export function apply(ctx: Context, cfg: Config) {
       if (!songId) {
         return "请指定歌曲id";
       }
-      const answers = (await getNicknames(songId)).toString()
+      const nicknames = await getNicknames(songId, 3);
+      const answers = (nicknames)?(nicknames).toString() : undefined;
       if (!answers) {
         return session.text(".songNotFound", {songId: songId});
       }
       //console.log(await getNicknames(songId));
       return session.text(".returnList", {
         songId: songId,
-        answers: (await getNicknames(songId)).toString(),
+        answers: answers
       })
     })
 
   //测试
-  /*ctx.command("test [option:text]")
+  ctx.command("test [option:text]")
   .action(async ({session}, option) => {
-  });*/
+    //await writeJSON('{"1":"test"}',dataUrl + '/temp.json')
+    console.log("finish")
+  });
 
 }
 
@@ -513,7 +532,7 @@ async function getSongInfoById(selectedKey: string, songInfoJson: JSON, bandIdJs
     answers = answers.concat(selectedKey);
   }
 
-  answers = answers.concat(await getNicknames(Number(selectedKey)));
+  answers = answers.concat(await getNicknames(Number(selectedKey), 3));
 
   const songExpertLevel: number = selectedSong["difficulty"]["3"]["playLevel"];
   const songBpm: number = selectedSong["bpm"]["3"][0]["bpm"];
@@ -615,9 +634,7 @@ async function fetchFileAndSave(fileUrl: string, localPath: string, ctx: Context
   //console.log(dir);
   await fs.promises.mkdir(dir, {recursive: true});
   fs.writeFileSync(localPath, buffer);
-  //console.log('文件下载完成');
 
-  //console.log('test02')
 }
 
 /**
@@ -645,13 +662,7 @@ async function runCommand(command: string) {
  * @param path 保存路径
  */
 async function writeJSON(jsonString: string, path: string) {
-  fs.writeFile(path, jsonString, (err) => {
-    if (err) {
-      console.error(`Error writing JSON to ${path}`, err);
-    } else {
-      //console.log('JSON data is written to file');
-    }
-  });
+  return fs.promises.writeFile(path, jsonString);
 }
 
 /**
@@ -725,6 +736,7 @@ async function readExcelFile(filePath: string): Promise<nicknameExcelElement[]> 
  * @param nickname 要添加的别名
  */
 async function addNickname(songId: number, title: string, nickname: string) {
+  /*
   // 读取Excel文件
   const workbook = XLSX.readFile(`${dataUrl}/nickname_song.xlsx'`);
   // 获取第一个工作表的名字
@@ -785,28 +797,126 @@ async function addNickname(songId: number, title: string, nickname: string) {
   //console.log(newWorksheet);
   XLSX.writeFile(workbook, `${dataUrl}/nickname_song.xlsx`)
   return '别名添加成功';
+*/
 
+
+
+
+
+  const nicknameLocalPath = `${dataUrl}/nicknameLocal.json`
+  const EXIST = fs.existsSync(nicknameLocalPath);
+  let nicknameLocalJson : nicknameJson;
+
+  //初始化
+  if (EXIST) {
+    //这里不用required，否则在文件被写入的时候无法及时改变状态或触发模块重载
+    const readJson = await fs.promises.readFile(nicknameLocalPath, 'utf-8');
+    try{
+      nicknameLocalJson = JSON.parse(readJson ? readJson : "{}");
+    }catch(e){
+      ccgLogger.error(`json格式错误 : ${readJson} `);
+      ccgLogger.error(e)
+      return "添加失败，请检查日志";
+    }
+  }else {
+    nicknameLocalJson = {};
+  }
+  console.log("start:")
+  console.log(nicknameLocalJson);
+  const oldNicknameLocalJson = JSON.stringify(nicknameLocalJson);
+  const appendSong : nicknameJsonElement = nicknameLocalJson[songId];
+  if (appendSong) {
+    if (appendSong["nicknames"]) {
+      if (appendSong["nicknames"].some(item => item === nickname)) {
+        return "别名已存在!";
+      } else {
+        appendSong["nicknames"].push(nickname);
+      }
+    } else {
+      appendSong["nicknames"] = [nickname];
+    }
+  }else{
+    nicknameLocalJson[songId] = {
+      title: title,
+      nicknames: [nickname],
+      nicknamesIgnore: [],
+    };
+  }
+  //xlsx查重
+  if ((await getNicknames(songId, 1)).some(item => betterCompare(item, nickname))) {
+    return "别名已存在！"
+  }
+  await writeJSON(JSON.stringify(nicknameLocalJson), `${dataUrl}/nicknameLocal.json`);
+  //fs.writeFileSync(`${dataUrl}/nicknameLocal.json`, JSON.stringify(nicknameLocalJson));
+  console.log("end:");
+  console.log(nicknameLocalJson);
+  if (oldNicknameLocalJson == JSON.stringify(nicknameLocalJson)) {
+    ccgLogger.warn(`json信息:${nicknameLocalJson},可能不符合所需要的json格式`);
+    return "添加失败，请检查日志";
+  }
+  return "别名添加成功！";
 }
 
 /**
  * 根据歌曲id获取别名列表
+ *
+ * 实现：
+ *    读取仓库别名和本地别名列表
+ *    把仓库别名里的符合ignore的别名禁用
+ *    返回两个别名列表相连的结果
+ *
  * @param songId 歌曲id
+ * @param option 选项, 1为仅xlsx，2为仅local，3为全部
  */
-async function getNicknames(songId: number) {
-  const songNickname = await readExcelFile(`${dataUrl}/nickname_song.xlsx`);
+async function getNicknames(songId: number, option: number) {
   let answers: string[] = [];
-  let nicknamesExcelItem = songNickname.find(item => item.Id == Number(songId));
+  if(option == 1 || option == 3){
+    const songNickname = await readExcelFile(`${dataUrl}/nickname_song.xlsx`);
+
+    let nicknamesExcelItem = songNickname.find(item => item.Id == Number(songId));
 
 
-  if (nicknamesExcelItem) {     //有对应Id的行
-    //获取对应行的Nickname，可能有也可能是undefined
-    const nicknames = nicknamesExcelItem.Nickname;
-    //检测是否已经存在nicknames
-    if (nicknames) {
-      answers = nicknames.split(',');
+    if (nicknamesExcelItem) {     //有对应Id的行
+      //获取对应行的Nickname，可能有也可能是undefined
+      const nicknames = nicknamesExcelItem.Nickname;
+      //检测是否已经存在nicknames
+      if (nicknames) {
+        answers = nicknames.split(',');
+      }
     }
   }
-
+  if (option == 2 || option == 3) {
+    const nicknameLocalPath = `${dataUrl}/nicknameLocal.json`
+    const EXIST = fs.existsSync(nicknameLocalPath);
+    let nicknameLocalJson: nicknameJson;
+    //初始化
+    if (EXIST) {
+      //这里不用required，否则在文件被写入的时候无法及时改变状态或触发模块重载
+      const readJson = await fs.promises.readFile(nicknameLocalPath, 'utf-8');
+      console.log("json:" + readJson);
+      try {
+        nicknameLocalJson = JSON.parse(readJson ? readJson : "{}");
+      } catch (e) {
+        ccgLogger.error(`json格式错误 : ${readJson} `);
+        ccgLogger.error(e)
+        return ["发生错误，请检查日志"]
+      }
+      //直接返回
+      if (!nicknameLocalJson || !nicknameLocalJson[songId] || !nicknameLocalJson[songId].nicknames) {
+        return answers;
+      }
+      if (nicknameLocalJson[songId].nicknamesIgnore && nicknameLocalJson[songId].nicknamesIgnore.length > 0) {
+        //筛选出没有被禁用的仓库别名
+        answers = answers.filter(items => !nicknameLocalJson[songId].nicknamesIgnore.some(ignore => ignore === items))
+      }
+      //合并两个别名列表
+      console.log(answers)
+      return answers.concat(nicknameLocalJson[songId].nicknames);
+    } else {
+      return answers;
+    }
+  }
+  //这一步是进行了xlsx没进行local的出口
   return answers;
 }
 
@@ -814,9 +924,10 @@ async function getNicknames(songId: number) {
  * 删除别名
  * @param songId 歌曲Id
  * @param nickname 别名
+ * @param songInfo 歌曲信息
  */
-async function delNickName(songId: number, nickname: string) {
-  // 读取Excel文件
+async function delNickName(songId: number, nickname: string, songInfo: Song) {
+  /*// 读取Excel文件
   const workbook = XLSX.readFile(`${dataUrl}/nickname_song.xlsx`);
   // 获取第一个工作表的名字
   const sheetName = workbook.SheetNames[0];
@@ -856,7 +967,83 @@ async function delNickName(songId: number, nickname: string) {
   //newWorksheet['!cols'][0] = { wch: 10, align: { horizontal: 'right' } };
   //console.log(newWorksheet);
   XLSX.writeFile(workbook, `${dataUrl}/nickname_song.xlsx`)
-  return '别名删除成功！';
+  return '别名删除成功！';*/
+
+
+
+  const nicknameLocalPath = `${dataUrl}/nicknameLocal.json`
+  const EXIST = fs.existsSync(nicknameLocalPath);
+  let nicknameLocalJson : nicknameJson;
+  //初始化
+  if (EXIST) {
+    //这里不用required，否则在文件被写入的时候无法及时改变状态或触发模块重载
+    const readJson = await fs.promises.readFile(nicknameLocalPath, 'utf-8');
+    try{
+      nicknameLocalJson = JSON.parse(readJson ? readJson : "{}");
+    }catch(e){
+      ccgLogger.error(`json格式错误 : ${readJson} `);
+      ccgLogger.error(e)
+      return "添加失败，请检查日志"
+    }
+
+    //防止出现undefined访问错误
+    if (nicknameLocalJson && nicknameLocalJson[songId] && nicknameLocalJson[songId].nicknames) {
+      //循环筛选，即执行删除操作
+      const newNicknames = nicknameLocalJson[songId].nicknames.filter(item => !betterCompare(item, nickname));
+      //长度变了，说明删除成功
+      if (nicknameLocalJson[songId].nicknames.length !== newNicknames.length) {
+        nicknameLocalJson[songId].nicknames = newNicknames;
+        await writeJSON(JSON.stringify(nicknameLocalJson), nicknameLocalPath);
+        return "别名删除成功";
+      }
+    }
+  }else{
+    await writeJSON("{}", nicknameLocalPath);
+  }
+  // 读取Excel文件
+  const workbook = XLSX.readFile(`${dataUrl}/nickname_song.xlsx`);
+  // 获取第一个工作表的名字
+  const sheetName = workbook.SheetNames[0];
+  // 获取工作表
+  const worksheet = workbook.Sheets[sheetName];
+  // 将工作表转换为JSON并返回
+  const nicknameJson: nicknameExcelElement[] = XLSX.utils.sheet_to_json(worksheet);
+
+  const delSong: nicknameExcelElement = nicknameJson.find(item => item.Id == songId);
+  if (!delSong) {
+    return '未找到该别名';
+  }
+  let nicknameStr = delSong.Nickname;
+  if (!nicknameStr) {
+    return '未找到该别名';
+  }
+  const nicknames: string[] = nicknameStr.split(',');
+  if (nicknames.some(item => item === nickname)) {
+    const element = nicknameLocalJson[songId];
+    //元素不存在，不能直接调用它的nicknameIgnore
+    if (!element) {
+      nicknameLocalJson[songId] = {
+        title: songInfo.songName,
+        nicknames: [],
+        nicknamesIgnore: [nickname],
+      }
+    }else{
+      //直接调用
+      const hadIgnored = nicknameLocalJson[songId].nicknamesIgnore;
+      if (hadIgnored && hadIgnored.length > 0) {
+        if (nicknameLocalJson[songId].nicknamesIgnore.some(item => item === nickname)){
+          return "未找到该别名";
+        }
+        nicknameLocalJson[songId].nicknamesIgnore.push(nickname);
+      }else{
+        nicknameLocalJson[songId].nicknamesIgnore = [nickname];
+      }
+    }
+    await writeJSON(JSON.stringify(nicknameLocalJson), nicknameLocalPath);
+    return "别名删除成功";
+  }else{
+    return "未找到该别名";
+  }
 }
 
 /**
@@ -891,8 +1078,10 @@ async function initJson(cfg: Config) {
   } else {
     try {
       //获取json
-      songInfoJson = await fetchJson(cfg.songInfoUrl);
-      bandIdJson = await fetchJson(cfg.bandIdUrl);
+      const songInfoJsonPromise = await fetchJson(cfg.songInfoUrl);
+      const bandIdJsonPromise = await fetchJson(cfg.bandIdUrl);
+
+      [songInfoJson, bandIdJson] = await Promise.all([songInfoJsonPromise, bandIdJsonPromise]);
       //console.log('读取json文件完成')
       //保存副本到本地
       //程序运行到此处已经成功读取了json
@@ -985,12 +1174,4 @@ function betterDistinguish(str: string) {
 
 function betterCompare(str1: string, str2:string): boolean {
   return betterDistinguish(str1) == betterDistinguish(str2);
-}
-
-async function detectFileExist(url: string) {
-  return new Promise((resolve) => {
-    fs.access(url, fs.constants.F_OK, (err) => {
-      resolve(!err);
-    })
-  })
 }
