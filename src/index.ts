@@ -499,11 +499,12 @@ export function apply(ctx: Context, cfg: Config) {
     })
 
   //测试
+  /*
   ctx.command("test [option:text]")
   .action(async ({session}, option) => {
     //await writeJSON('{"1":"test"}',dataUrl + '/temp.json')
     console.log("finish")
-  });
+  });*/
 
 }
 
