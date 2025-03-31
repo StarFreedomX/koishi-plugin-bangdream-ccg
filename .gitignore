@@ -3,8 +3,7 @@ dist
 external
 
 assets/cache
-assets/bandId.json
-assets/songInfo.json
+
 
 node_modules
 npm-debug.log
