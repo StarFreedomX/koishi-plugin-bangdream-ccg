@@ -519,7 +519,9 @@ async function getSongInfoById(selectedKey: string, songInfoJson: JSON, bandIdJs
     answers = answers.concat(selectedKey);
   }
 
-  answers = answers.concat(await getNicknames(Number(selectedKey), 3));
+  if (cfg.nickname) {
+    answers = answers.concat(await getNicknames(Number(selectedKey), 3));
+  }
 
   const songExpertLevel: number = selectedSong["difficulty"]["3"]["playLevel"];
   const songBpm: number = selectedSong["bpm"]["3"][0]["bpm"];
