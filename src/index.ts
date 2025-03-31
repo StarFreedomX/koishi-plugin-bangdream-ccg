@@ -695,7 +695,7 @@ function readExcelFile(filePath: string): nicknameExcelElement[] {
     const worksheet = workbook.Sheets[sheetName];
     // 将工作表转换为JSON并返回
     return XLSX.utils.sheet_to_json(worksheet);
-  }catch(err) {
+  } catch (err) {
     ccgLogger.error('读取xlsx文件发生错误')
     ccgLogger.error(err)
   }
@@ -868,7 +868,7 @@ async function delNickName(songId: number, nickname: string, songInfo: Song) {
         await writeJSON(JSON.stringify(nicknameLocalJson), nicknameLocalPath);
         return SUCCESS;
       }
-    }else if(!readJson.trim().length) {
+    } else if (!readJson.trim().length) {
       await writeJSON(JSON.stringify(nicknameLocalJson), nicknameLocalPath);
     }
   } else {
