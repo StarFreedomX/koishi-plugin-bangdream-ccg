@@ -3,6 +3,7 @@ import {exec} from "child_process";
 import * as XLSX from 'xlsx';
 import {} from '@koishijs/cache'
 import * as fs from 'fs'
+import {stringify} from "node:querystring";
 //import * as os from 'os';
 
 export const ccgLogger = new Logger('bangdream-ccg');
@@ -487,10 +488,17 @@ export function apply(ctx: Context, cfg: Config) {
     })
 
   //测试
-  /*
+/*
     ctx.command("test [option:text]")
     .action(async ({session}, option) => {
-
+      const songInfoJson = require(`${dataUrl}/songInfo.json`);
+      let sumTime = 0;
+      for(let i = 0; i < 690; i++){
+        const j = (i + '');
+        const tempTime = songInfoJson[j]?.["length"];
+        if (tempTime) sumTime += tempTime;
+      }
+      console.log(sumTime);
     });*/
 
 
@@ -515,6 +523,8 @@ async function getSongInfoById(selectedKey: string, songInfoJson: JSON, bandIdJs
   const selectedSongLength: number = selectedSong["length"];
   let selectedSecond = Random.int(0, Math.floor(selectedSongLength) - cfg.audioLength);
   let answers = selectedSongNames.filter((item: string) => item != null && item != "");
+  //合并重复名字
+  answers = Array.from(new Set(answers));
   if (cfg.idGuess) {
     answers = answers.concat(selectedKey);
   }
