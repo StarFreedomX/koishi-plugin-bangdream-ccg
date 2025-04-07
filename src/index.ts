@@ -425,13 +425,15 @@ export function apply(ctx: Context, cfg: Config) {
             tipsIndex = 3;
           } else if (['发布时间', '时间', 'time', '4'].some(name => betterCompare(name, option))) {
             tipsIndex = 4;
+          }else if (['首字母', '首字符', '开头', 'start', '5'].some(name => betterCompare(name, option))) {
+            tipsIndex = 5;
           } else if ('all' == option) {
             tipsIndex = -2;
           } else {
             tipsIndex = -1;
           }
           let tipsElementIndex: number;
-          if (tipsIndex > -1 && (tipsElementIndex = tips.findIndex(tipsElement => tipsElement.includes(['乐队', 'EX谱面难度', 'Bpm', '歌曲类型', '服发布时间'][tipsIndex]))) != -1) {
+          if (tipsIndex > -1 && (tipsElementIndex = tips.findIndex(tipsElement => tipsElement.includes(['乐队', 'EX谱面难度', 'Bpm', '歌曲类型', '服发布时间','首字符'][tipsIndex]))) != -1) {
             for (let i = 0; i < tips.length; i++) {
               if (i == tipsElementIndex) {
                 selectedElement = tips[i];
@@ -489,17 +491,10 @@ export function apply(ctx: Context, cfg: Config) {
     })
 
   //测试
-/*
-    ctx.command("test [option:text]")
+
+    /*ctx.command("test [option:text]")
     .action(async ({session}, option) => {
-      const songInfoJson = require(`${dataUrl}/songInfo.json`);
-      let sumTime = 0;
-      for(let i = 0; i < 690; i++){
-        const j = (i + '');
-        const tempTime = songInfoJson[j]?.["length"];
-        if (tempTime) sumTime += tempTime;
-      }
-      console.log(sumTime);
+      return '是'[0];
     });*/
 
 
@@ -540,15 +535,16 @@ async function getSongInfoById(selectedKey: string, songInfoJson: JSON, bandIdJs
   const songTimeArray = selectedSong["publishedAt"];
   let server = cfg.serverLimit;
   const serverName = ['日服', '国际服', '台服', '国服', '韩服'];
+  const firstChar = selectedSongNames[cfg.defaultSongNameServer][0];
   let songTime: string = '';
   for (let i = 0; server && i < 5; i++) {
     if (server % 2 && songTimeArray[i]) {
       const newDate = new Date(Number(songTimeArray[i]));
-      songTime += (`${serverName[i]}发布时间:${newDate.getFullYear()}年\n`);
+        songTime += (`\n${serverName[i]}发布时间:${newDate.getFullYear()}年`);
     }
     server = server >> 1;
   }
-  const songTips: string[] = [`乐队:${selectedBandName}`, `EX谱面难度:${songExpertLevel}`, `Bpm:${songBpm}`, `歌曲类型:${songTag}`, `${songTime}`];
+  const songTips: string[] = [`乐队:${selectedBandName}`, `EX谱面难度:${songExpertLevel}`, `Bpm:${songBpm}`, `歌曲类型:${songTag}`, `${songTime}`, `首字符:${firstChar}`];
 
   return {
     bandId: selectedSong["bandId"].toString(),
