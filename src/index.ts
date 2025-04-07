@@ -80,12 +80,12 @@ export const usage = `
 <h1>邦多利猜猜歌</h1>
 <h2>歌曲数据来源于bestdori.com</h2>
 
-<h4>开发中，有问题可以到GitHub提issue<del>(114514年后才会解决)</del></h4>
+<h4>开发中，有问题或建议可以到<a href="https://github.com/StarFreedomX/koishi-plugin-bangdream-ccg" target="_blank">GitHub仓库</a>提issue<del>(114514年后才会解决)</del></h4>
+<h4>如果想继续开发优化本插件，<a href="https://github.com/StarFreedomX/koishi-plugin-bangdream-ccg/pulls" target="_blank">欢迎 PR</a></h4>
 <h2>Notice</h2>
 * 本项目需提前安装并配置FFmpeg<br/>
-* 目前只在单个群聊做过测试<br/>
 * 如果遇到assets中的nickname_song.xlsx丢失需要自行到本仓库下载<br/>
-* 不要随意删除cache的文件，如果由于文件未找到而报错，可以手动前往数据库或通过指令ccg.clear清除缓存<br/>
+<br/>
 <br/>
 <h2>Advanced</h2>
 关于配置项songFileId,占位符如下：<br/>
@@ -95,7 +95,7 @@ export const usage = `
 {bandId}=>乐队id<br/>
 
 <h2>Thanks</h2>
-<h4>开发过程中参考插件koishi-plugin-cck(作者kumoSleeping)</h4>
+<h4>开发过程中参考插件<a href="/market?keyword=koishi-plugin-cck">koishi-plugin-cck</a>(作者kumoSleeping)</h4>
 `
 
 export const assetsUrl: string = `${__dirname}/../assets`;
@@ -263,6 +263,7 @@ export function apply(ctx: Context, cfg: Config) {
             const readySong = await ctx.cache.get(`bangdream_ccg_${session.gid}`, 'run');
             if (!readySong || readySong.isComplete) {
               dispose();
+              disposeTimer();
               return next();
             } else if (readySong.answers.some(alias => betterCompare(alias, session.content))) {
               dispose();
