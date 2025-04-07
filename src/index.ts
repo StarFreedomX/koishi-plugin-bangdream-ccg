@@ -3,7 +3,6 @@ import {exec} from "child_process";
 import * as XLSX from 'xlsx';
 import {} from '@koishijs/cache'
 import * as fs from 'fs'
-import {stringify} from "node:querystring";
 //import * as os from 'os';
 
 export const ccgLogger = new Logger('bangdream-ccg');
