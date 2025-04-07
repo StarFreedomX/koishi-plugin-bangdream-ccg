@@ -79,12 +79,12 @@ export const usage = `
 <h1>邦多利猜猜歌</h1>
 <h2>歌曲数据来源于bestdori.com</h2>
 
-<h4>开发中，有问题可以到GitHub提issue<del>(114514年后才会解决)</del></h4>
+<h4>开发中，有问题或建议可以到<a href="https://github.com/StarFreedomX/koishi-plugin-bangdream-ccg" target="_blank">GitHub仓库</a>提issue<del>(114514年后才会解决)</del></h4>
+<h4>如果想继续开发优化本插件，<a href="https://github.com/StarFreedomX/koishi-plugin-bangdream-ccg/pulls" target="_blank">欢迎 PR</a></h4>
 <h2>Notice</h2>
 * 本项目需提前安装并配置FFmpeg<br/>
-* 目前只在单个群聊做过测试<br/>
 * 如果遇到assets中的nickname_song.xlsx丢失需要自行到本仓库下载<br/>
-* 不要随意删除cache的文件，如果由于文件未找到而报错，可以手动前往数据库或通过指令ccg.clear清除缓存<br/>
+<br/>
 <br/>
 <h2>Advanced</h2>
 关于配置项songFileId,占位符如下：<br/>
@@ -94,7 +94,7 @@ export const usage = `
 {bandId}=>乐队id<br/>
 
 <h2>Thanks</h2>
-<h4>开发过程中参考插件koishi-plugin-cck(作者kumoSleeping)</h4>
+<h4>开发过程中参考插件<a href="/market?keyword=koishi-plugin-cck">koishi-plugin-cck</a>(作者kumoSleeping)</h4>
 `
 
 export const assetsUrl: string = `${__dirname}/../assets`;
@@ -262,6 +262,7 @@ export function apply(ctx: Context, cfg: Config) {
             const readySong = await ctx.cache.get(`bangdream_ccg_${session.gid}`, 'run');
             if (!readySong || readySong.isComplete) {
               dispose();
+              disposeTimer();
               return next();
             } else if (readySong.answers.some(alias => betterCompare(alias, session.content))) {
               dispose();
@@ -423,13 +424,15 @@ export function apply(ctx: Context, cfg: Config) {
             tipsIndex = 3;
           } else if (['发布时间', '时间', 'time', '4'].some(name => betterCompare(name, option))) {
             tipsIndex = 4;
+          }else if (['首字母', '首字符', '开头', 'start', '5'].some(name => betterCompare(name, option))) {
+            tipsIndex = 5;
           } else if ('all' == option) {
             tipsIndex = -2;
           } else {
             tipsIndex = -1;
           }
           let tipsElementIndex: number;
-          if (tipsIndex > -1 && (tipsElementIndex = tips.findIndex(tipsElement => tipsElement.includes(['乐队', 'EX谱面难度', 'Bpm', '歌曲类型', '服发布时间'][tipsIndex]))) != -1) {
+          if (tipsIndex > -1 && (tipsElementIndex = tips.findIndex(tipsElement => tipsElement.includes(['乐队', 'EX谱面难度', 'Bpm', '歌曲类型', '服发布时间','首字符'][tipsIndex]))) != -1) {
             for (let i = 0; i < tips.length; i++) {
               if (i == tipsElementIndex) {
                 selectedElement = tips[i];
@@ -487,10 +490,10 @@ export function apply(ctx: Context, cfg: Config) {
     })
 
   //测试
-  /*
-    ctx.command("test [option:text]")
-    .action(async ({session}, option) => {
 
+    /*ctx.command("test [option:text]")
+    .action(async ({session}, option) => {
+      return '是'[0];
     });*/
 
 
@@ -515,11 +518,15 @@ async function getSongInfoById(selectedKey: string, songInfoJson: JSON, bandIdJs
   const selectedSongLength: number = selectedSong["length"];
   let selectedSecond = Random.int(0, Math.floor(selectedSongLength) - cfg.audioLength);
   let answers = selectedSongNames.filter((item: string) => item != null && item != "");
+  //合并重复名字
+  answers = Array.from(new Set(answers));
   if (cfg.idGuess) {
     answers = answers.concat(selectedKey);
   }
 
-  answers = answers.concat(await getNicknames(Number(selectedKey), 3));
+  if (cfg.nickname) {
+    answers = answers.concat(await getNicknames(Number(selectedKey), 3));
+  }
 
   const songExpertLevel: number = selectedSong["difficulty"]["3"]["playLevel"];
   const songBpm: number = selectedSong["bpm"]["3"][0]["bpm"];
@@ -527,15 +534,16 @@ async function getSongInfoById(selectedKey: string, songInfoJson: JSON, bandIdJs
   const songTimeArray = selectedSong["publishedAt"];
   let server = cfg.serverLimit;
   const serverName = ['日服', '国际服', '台服', '国服', '韩服'];
+  const firstChar = selectedSongNames[cfg.defaultSongNameServer][0];
   let songTime: string = '';
   for (let i = 0; server && i < 5; i++) {
     if (server % 2 && songTimeArray[i]) {
       const newDate = new Date(Number(songTimeArray[i]));
-      songTime += (`${serverName[i]}发布时间:${newDate.getFullYear()}年\n`);
+        songTime += (`\n${serverName[i]}发布时间:${newDate.getFullYear()}年`);
     }
     server = server >> 1;
   }
-  const songTips: string[] = [`乐队:${selectedBandName}`, `EX谱面难度:${songExpertLevel}`, `Bpm:${songBpm}`, `歌曲类型:${songTag}`, `${songTime}`];
+  const songTips: string[] = [`乐队:${selectedBandName}`, `EX谱面难度:${songExpertLevel}`, `Bpm:${songBpm}`, `歌曲类型:${songTag}`, `${songTime}`, `首字符:${firstChar}`];
 
   return {
     bandId: selectedSong["bandId"].toString(),
@@ -695,7 +703,7 @@ function readExcelFile(filePath: string): nicknameExcelElement[] {
     const worksheet = workbook.Sheets[sheetName];
     // 将工作表转换为JSON并返回
     return XLSX.utils.sheet_to_json(worksheet);
-  }catch(err) {
+  } catch (err) {
     ccgLogger.error('读取xlsx文件发生错误')
     ccgLogger.error(err)
   }
@@ -868,7 +876,7 @@ async function delNickName(songId: number, nickname: string, songInfo: Song) {
         await writeJSON(JSON.stringify(nicknameLocalJson), nicknameLocalPath);
         return SUCCESS;
       }
-    }else if(!readJson.trim().length) {
+    } else if (!readJson.trim().length) {
       await writeJSON(JSON.stringify(nicknameLocalJson), nicknameLocalPath);
     }
   } else {
