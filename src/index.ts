@@ -157,6 +157,7 @@ export interface Config {
   //saveSongFile: boolean;
   defaultSongNameServer: number;
   FFmpegPath: string;
+  devMode: boolean;
 }
 
 export const Config = Schema.intersect([
@@ -184,12 +185,14 @@ export const Config = Schema.intersect([
     bandIdUrl: Schema.string().default("https://bestdori.com/api/bands/all.1.json").description("乐队信息地址，默认url来源于bestdori.com"),
     songFileUrl: Schema.string().default("https://bestdori.com/assets/jp/sound/bgm{songId}_rip/bgm{songId}.mp3").description("歌曲下载地址，花括号内的songId对应实际的songId被替换"),
     //nicknameUrl: Schema.string().default("https://github.com/Yamamoto-2/tsugu-bangdream-bot/raw/refs/heads/master/backend/config/nickname_song.xlsx").description("别名数据表来源，默认为Tsugu机器人仓库"),
+    devMode: Schema.boolean().default(false).hidden(),
   }).description('高级配置'),
+  
 ])
 
 
 export function apply(ctx: Context, cfg: Config) {
-  ctx.i18n.define('zh-CN', require('./locales/zh-CN'))
+  ctx.i18n.define('zh-CN', require('./locales/zh-CN'));
 
   //初始化，检测当前的应用目录
   dataUrl = `${ctx.baseDir}/data/bangdream-ccg`;
@@ -414,7 +417,9 @@ export function apply(ctx: Context, cfg: Config) {
 
         } else {
           let tipsIndex = -1;
-          if (['band', '乐队', '0'].some(name => betterCompare(name, option))) {
+          if ('all' == option) {
+            tipsIndex = -2;
+          } else if (['band', '乐队', '0'].some(name => betterCompare(name, option))) {
             tipsIndex = 0;
           } else if (['EX谱面难度', '定级', 'difficulty', '难度', 'ex', '1'].some(name => betterCompare(name, option))) {
             tipsIndex = 1;
@@ -424,15 +429,13 @@ export function apply(ctx: Context, cfg: Config) {
             tipsIndex = 3;
           } else if (['发布时间', '时间', 'time', '4'].some(name => betterCompare(name, option))) {
             tipsIndex = 4;
-          }else if (['首字母', '首字符', '开头', 'start', '5'].some(name => betterCompare(name, option))) {
+          } else if (['首字母', '首字符', '开头', 'start', '5'].some(name => betterCompare(name, option))) {
             tipsIndex = 5;
-          } else if ('all' == option) {
-            tipsIndex = -2;
           } else {
             tipsIndex = -1;
           }
           let tipsElementIndex: number;
-          if (tipsIndex > -1 && (tipsElementIndex = tips.findIndex(tipsElement => tipsElement.includes(['乐队', 'EX谱面难度', 'Bpm', '歌曲类型', '服发布时间','首字符'][tipsIndex]))) != -1) {
+          if (tipsIndex > -1 && (tipsElementIndex = tips.findIndex(tipsElement => tipsElement.includes(['乐队', 'EX谱面难度', 'Bpm', '歌曲类型', '服发布时间', '首字符'][tipsIndex]))) != -1) {
             for (let i = 0; i < tips.length; i++) {
               if (i == tipsElementIndex) {
                 selectedElement = tips[i];
@@ -478,7 +481,7 @@ export function apply(ctx: Context, cfg: Config) {
         return "请指定歌曲id";
       }
       const nicknames = await getNicknames(songId, 3);
-      const answers = (nicknames) ? (nicknames).toString() : undefined;
+      const answers = nicknames?.toString();
       if (!answers) {
         return session.text(".songNotFound", {songId: songId});
       }
@@ -489,14 +492,107 @@ export function apply(ctx: Context, cfg: Config) {
       })
     })
 
-  //测试
+  if (cfg.devMode) {
 
-    /*ctx.command("test [option:text]")
-    .action(async ({session}, option) => {
-      return '是'[0];
-    });*/
+    ctx.command("test [option:text]")
+      .action(async ({session}, option) => {
+        return;
+      });
 
+    ctx.command('ccg.combine')
+      .action(async ({session}) => {
+        //console.log(excelJson);
+        const jsonStr = await fs.promises.readFile(dataUrl + '/nicknameLocal.json', 'utf-8');
+        const jsonJson = JSON.parse(jsonStr.trim() || "{}");
+        //console.log(jsonJson);
+        const keys = Object.keys(jsonJson);
+        // 读取Excel文件
+        const workbook = XLSX.readFile(dataUrl + '/nickname_song.xlsx');
+        // 获取工作表的名字
+        const sheetName = workbook.SheetNames[0];
+        // 获取工作表
+        const worksheet = workbook.Sheets[sheetName];
+        // 将工作表转换为JSON并返回
+        const nicknameJson: nicknameExcelElement[] = XLSX.utils.sheet_to_json(worksheet);
 
+        for (const key of keys) {
+          const songId = Number(key);
+          const title = jsonJson?.[key]?.title;
+          let nickname = jsonJson?.[key]?.nicknames?.join(',');
+          const nicknames: string[] = jsonJson?.[key]?.nicknames;
+          let appendSong = nicknameJson.find(item => item.Id == songId);
+
+          if (appendSong) {
+            //console.log(appendSong);
+            //appendSong.Nickname = appendSong.Nickname ? appendSong.Nickname + ',' + nickname : nickname;
+            if (appendSong.Nickname) {
+              //查重
+              const excelNickname: string[] = appendSong.Nickname.split(',');
+              const localNickname: string[] = nickname.split(',');
+              nickname = localNickname.filter(item => !excelNickname.includes(item)).join(',');
+              if (!nickname) continue;
+              appendSong.Nickname += `,${nickname}`;
+            } else {
+              appendSong.Nickname = nickname;
+            }
+            console.log(`已合并:${nickname} to ${songId} - ${title}`);
+            //console.log(appendSong);
+          } else {
+            const index = nicknameJson.findIndex(item => item.Id > songId);
+            let appending: nicknameExcelElement = {
+              Id: songId,
+              Title: title,
+              Nickname: nickname,
+            }
+            // 如果没有找到更大的Id，说明应该添加到数组末尾
+            if (index === -1) {
+              nicknameJson.push(appending);
+            } else {
+              // 否则，在找到的位置插入新对象
+              nicknameJson.splice(index, 0, appending);
+            }
+            console.log(`已合并:${nickname} to ${songId} - ${title}`);
+          }
+          const newWorksheet = XLSX.utils.json_to_sheet(nicknameJson, {skipHeader: false});
+          //const workbook = XLSX.utils.book_new();
+          //XLSX.utils.book_append_sheet(workbook, newWorksheet, 'Sheet1');
+          workbook.Sheets[sheetName] = newWorksheet;
+
+          // 设置列宽
+          if (!newWorksheet['!cols']) {
+            newWorksheet['!cols'] = [];
+          }
+          //列宽
+          newWorksheet['!cols'].push({wch: 10}, {wch: 50}, {wch: 65}, {wch: 55});
+          //右对齐
+          //newWorksheet['!cols'][0] = { wch: 10, align: { horizontal: 'right' } };
+          //console.log(newWorksheet);
+          XLSX.writeFile(workbook, `${dataUrl}/nickname_song.xlsx`)
+        }
+      })
+
+    //对比xlsx，开发用
+    ctx.command('ccg.compare')
+      .action(async ({session}) => {
+        const excelJsonTsugu: nicknameExcelElement[] = readExcelFile(`${dataUrl}/nickname_song_tsugu.xlsx`);
+        const excelJsonCcg: nicknameExcelElement[] = readExcelFile(`${dataUrl}/nickname_song_ccg.xlsx`);
+        for (const elementCcg of excelJsonCcg) {
+          const change =
+            elementCcg?.Nickname?.split(',')
+              ?.filter(itemCcg =>
+                //找到TsuguJson对应id的元素
+                !excelJsonTsugu?.filter(item => item.Id === elementCcg.Id)?.[0]
+                  ?.Nickname?.split(',')
+                  ?.some(itemTsugu => betterCompare(itemTsugu, itemCcg))
+              );
+          if (change?.length) {
+            //console.log(change);
+            console.log(`#${elementCcg.Id} - ${elementCcg.Title} - 添加: ${change}`);
+          }
+        }
+
+      })
+  }
 }
 
 /**
@@ -514,12 +610,13 @@ async function getSongInfoById(selectedKey: string, songInfoJson: JSON, bandIdJs
   //乐队名
   const selectedBandName = bandIdJson[selectedSong["bandId"]]["bandName"][0];
   //歌曲名
-  const selectedSongNames = selectedSong["musicTitle"];
+  const selectedSongNames: string[] = selectedSong["musicTitle"];
   const selectedSongLength: number = selectedSong["length"];
-  let selectedSecond = Random.int(0, Math.floor(selectedSongLength) - cfg.audioLength);
-  let answers = selectedSongNames.filter((item: string) => item != null && item != "");
+  let selectedSecond: number = Random.int(0, Math.floor(selectedSongLength) - cfg.audioLength);
+  let answers: string[] = selectedSongNames.filter((item: string) => item?.length);
   //合并重复名字
   answers = Array.from(new Set(answers));
+
   if (cfg.idGuess) {
     answers = answers.concat(selectedKey);
   }
@@ -539,11 +636,18 @@ async function getSongInfoById(selectedKey: string, songInfoJson: JSON, bandIdJs
   for (let i = 0; server && i < 5; i++) {
     if (server % 2 && songTimeArray[i]) {
       const newDate = new Date(Number(songTimeArray[i]));
-        songTime += (`\n${serverName[i]}发布时间:${newDate.getFullYear()}年`);
+      songTime += `${songTime ? '\n' : ''}${serverName[i]}发布时间:${newDate.getFullYear()}年`
     }
     server = server >> 1;
   }
-  const songTips: string[] = [`乐队:${selectedBandName}`, `EX谱面难度:${songExpertLevel}`, `Bpm:${songBpm}`, `歌曲类型:${songTag}`, `${songTime}`, `首字符:${firstChar}`];
+  const songTips: string[] = [
+    `乐队:${selectedBandName}`,
+    `EX谱面难度:${songExpertLevel}`,
+    `Bpm:${songBpm}`,
+    `歌曲类型:${songTag}`,
+    `${songTime}`,
+    `首字符:${firstChar}`
+  ];
 
   return {
     bandId: selectedSong["bandId"].toString(),
@@ -567,16 +671,13 @@ async function getSongInfoById(selectedKey: string, songInfoJson: JSON, bandIdJs
  */
 async function getRandomSong(songInfoJson: JSON, bandIdJson: JSON, cfg: Config): Promise<Song> {
   let selectedKey: string;
+  //筛选服务器
+  const serverIndexes = [0, 1, 2, 3, 4].filter(i => ((cfg.serverLimit >> i) & 1));
   do {
     selectedKey = Random.pick(Object.keys(songInfoJson))
-    //筛选服务器
-    if (
-      ((cfg.serverLimit >> 0) % 2 && songInfoJson[selectedKey]['musicTitle'][0]) ||       //日服
-      ((cfg.serverLimit >> 3) % 2 && songInfoJson[selectedKey]['musicTitle'][3]) ||       //国服
-      ((cfg.serverLimit >> 1) % 2 && songInfoJson[selectedKey]['musicTitle'][1]) ||       //国际服
-      ((cfg.serverLimit >> 2) % 2 && songInfoJson[selectedKey]['musicTitle'][2]) ||       //台服
-      ((cfg.serverLimit >> 4) % 2 && songInfoJson[selectedKey]['musicTitle'][4]))        //韩服
-      break;
+    const titles = songInfoJson?.[selectedKey]?.['musicTitle'];
+    const valid = serverIndexes.some(i => titles?.[i]);
+    if (valid) break;
   } while (true);
   return getSongInfoById(selectedKey, songInfoJson, bandIdJson, cfg);
 
@@ -591,7 +692,7 @@ async function fetchJson(url: string): Promise<JSON> {
   const response = await fetch(url);
   // 检查响应状态
   if (!response.ok) {
-    throw new Error(`HTTP error! Fetch ${url} Failed, status: ${response.status}`);
+    ccgLogger.error(`HTTP error! Fetch ${url} Failed, status: ${response.status}`);
   }
   // 解析 JSON 数据并返回
   return response.json();
@@ -668,7 +769,7 @@ async function handleSong(JSONs: JSON[], ctx: Context, cfg: Config, gid: string)
   const songFileUrl = turnSongFileUrl(song, cfg);
   //保存文件
   await fetchFileAndSave(songFileUrl, `${cacheUrl}/[full]temp_${gid}.mp3`, ctx);
-  const FFmpegPath = cfg.FFmpegPath ?? 'ffmpeg.exe';
+  const FFmpegPath = cfg.FFmpegPath ?? 'ffmpeg';
   if (FFmpegPath) {
   }
   //裁切音频
@@ -738,7 +839,7 @@ async function addNickname(songId: number, title: string, nickname: string) {
     nicknameLocalJson = {};
   }
   console.log("start:")
-  console.log(nicknameLocalJson);
+  //console.log(nicknameLocalJson);
   const oldNicknameLocalJson = JSON.stringify(nicknameLocalJson);
   const appendSong: nicknameJsonElement = nicknameLocalJson[songId];
   if (appendSong) {
@@ -765,7 +866,7 @@ async function addNickname(songId: number, title: string, nickname: string) {
   //查重通过
 
   console.log("end:");
-  console.log(nicknameLocalJson);
+  //console.log(nicknameLocalJson);
   if (oldNicknameLocalJson == JSON.stringify(nicknameLocalJson)) {
     ccgLogger.warn(`json信息:${nicknameLocalJson},可能不符合所需要的json格式`);
     return FAILED;
@@ -808,7 +909,7 @@ async function getNicknames(songId: number, option: number) {
     //这里是读取json文件过程
     //这里不用required，否则在文件被写入的时候无法及时改变状态或触发模块重载
     const readJson = await fs.promises.readFile(nicknameLocalPath, 'utf-8');
-    console.log("json:" + readJson);
+    //console.log("json:" + readJson);
     let nicknameLocalJson: nicknameJson;
     try {
       nicknameLocalJson = JSON.parse(readJson.trim() || "{}");
@@ -996,8 +1097,7 @@ function turnSongFileUrl(song: Song, cfg: Config): string {
  * @param str
  */
 function betterDistinguish(str: string) {
-  str += '';
-  str = str.toLowerCase().replace(/\s+/g, '');
+  str = String(str).toLowerCase().replace(/\s+/g, '');
   const reflectMap: Map<string, string> = new Map([
     ['，', ','],
     ['：', ':'],
