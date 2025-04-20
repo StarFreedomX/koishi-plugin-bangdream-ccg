@@ -187,7 +187,7 @@ export const Config = Schema.intersect([
     //nicknameUrl: Schema.string().default("https://github.com/Yamamoto-2/tsugu-bangdream-bot/raw/refs/heads/master/backend/config/nickname_song.xlsx").description("别名数据表来源，默认为Tsugu机器人仓库"),
     devMode: Schema.boolean().default(false).hidden(),
   }).description('高级配置'),
-  
+
 ])
 
 
@@ -206,7 +206,8 @@ export function apply(ctx: Context, cfg: Config) {
     console.log('copying & removing')
     fs.copyFileSync(`${assetsUrl}/nickname_song.xlsx`, `${dataUrl}/nickname_song.xlsx`);
     //fs.copyFileSync(`${assetsUrl}/nickname_song.xlsx`, `${assetsUrl}/nickname_song.xlsx`);
-    fs.rmSync(`${assetsUrl}/nickname_song.xlsx`);
+    if (process.env.NODE_ENV !== "development")
+      fs.rmSync(`${assetsUrl}/nickname_song.xlsx`);
   }
 
 
