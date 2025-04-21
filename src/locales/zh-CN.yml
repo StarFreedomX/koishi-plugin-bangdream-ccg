@@ -3,12 +3,14 @@ commands:
     description: BanG Dream!猜猜歌
     messages:
       answer: '答案正确！<br/>
+      {songCover}
       歌曲id:{selectedKey}<br/>
       乐队：{selectedBandName}<br/>
       歌曲名:{selectedSongName}<br/>
       关键词:{answers}<br/>
       截取时间点:{selectedSecond}s'
       timeout: '时间到！正确答案是：<br/>
+      {songCover}
       歌曲id:{selectedKey}<br/>
       乐队：{selectedBandName}<br/>
       歌曲名:{selectedSongName}<br/>
@@ -29,6 +31,7 @@ commands:
     answer:
       messages:
         answer: '那么答案是：<br/>
+        {songCover}
         歌曲id:{selectedKey}<br/>
       乐队：{selectedBandName}<br/>
       歌曲名:{selectedSongName}<br/>
