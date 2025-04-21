@@ -158,7 +158,7 @@ export interface Config {
   //saveSongFile: boolean;
   defaultSongNameServer: number;
   FFmpegPath: string;
-  devMode: boolean;
+  //devMode: boolean;
 }
 
 export const Config = Schema.intersect([
@@ -187,7 +187,7 @@ export const Config = Schema.intersect([
     bandIdUrl: Schema.string().default("https://bestdori.com/api/bands/all.1.json").description("乐队信息地址，默认url来源于bestdori.com"),
     songFileUrl: Schema.string().default("https://bestdori.com/assets/jp/sound/bgm{songId}_rip/bgm{songId}.mp3").description("歌曲下载地址，花括号内的songId对应实际的songId被替换"),
     //nicknameUrl: Schema.string().default("https://github.com/Yamamoto-2/tsugu-bangdream-bot/raw/refs/heads/master/backend/config/nickname_song.xlsx").description("别名数据表来源，默认为Tsugu机器人仓库"),
-    devMode: Schema.boolean().default(false).hidden(),
+    //devMode: Schema.boolean().default(false).hidden(),
   }).description('高级配置'),
 
 ])
@@ -306,7 +306,7 @@ export function apply(ctx: Context, cfg: Config) {
                 }))
               ])
             }
-          }, cfg.timeout * 1000)
+          }, cfg.timeout * 1000);
 
 
           //这里已经发送完毕，缓存2已经准备好了题目的信息
@@ -498,11 +498,58 @@ export function apply(ctx: Context, cfg: Config) {
       })
     })
 
-  if (cfg.devMode) {
+  //开发环境
+  if (process.env.NODE_ENV === 'development') {
 
     ctx.command("test [option:text]")
       .action(async ({session}, option) => {
-        return;
+        const selectedKey = option;
+        const [songInfoJson, bandIdJson] = await initJson(cfg);
+        //获取歌曲信息
+        const selectedSong = songInfoJson[selectedKey];
+        //乐队名
+        const selectedBandName = bandIdJson[selectedSong["bandId"]]["bandName"][0];
+        //歌曲名
+        const selectedSongNames: string[] = selectedSong["musicTitle"];
+
+        let songCoverBase64: string;
+        let arrayBuffer = null,index = 0;
+        const servers = ['jp', 'en', 'tw', 'cn', 'kr'];
+        const availableServers = servers.filter((_, i) => selectedSongNames[i]);
+        const base = Math.ceil(Number(selectedKey) / 10) * 10;
+
+        do {
+          let retryTimes = 3;
+          do {
+            try {
+              const server = availableServers[index];
+              const url = `https://bestdori.com/assets/${server}/musicjacket/musicjacket${
+                base
+              }_rip/assets-star-forassetbundle-startapp-musicjacket-musicjacket${
+                base
+              }-${selectedSong["jacketImage"][0]}-jacket.png`;
+
+              arrayBuffer = Buffer.from(await ctx.http.get(url, {responseType: 'arraybuffer'}));
+              console.log(url)
+              if (arrayBuffer.toString().startsWith("<!DOCTYPE html>")){
+                arrayBuffer = null;
+              }
+            } catch (err) {
+              console.error(err)
+            }
+          }while(!arrayBuffer && retryTimes-- > 0);
+
+        }while(!arrayBuffer && ++index < availableServers.length);
+        if (arrayBuffer) {
+          songCoverBase64 = `data:image/png;base64,${
+            arrayBuffer.toString('base64')
+          }`;
+          //fs.writeFileSync('./test.txt',Buffer.from(buffer))
+        }else{
+          songCoverBase64 = '';
+        }
+        //console.log(songCoverBase64);
+        return h.image(songCoverBase64);
       });
 
     ctx.command('ccg.combine')
@@ -611,7 +658,7 @@ export function apply(ctx: Context, cfg: Config) {
  * @param ctx Context
  * @param cfg 配置表单
  */
-async function getSongInfoById(selectedKey: string, songInfoJson: JSON, bandIdJson: JSON, ctx:Context,  cfg: Config): Promise<Song> {
+async function getSongInfoById(selectedKey: string, songInfoJson: JSON, bandIdJson: JSON, ctx:Context, cfg: Config): Promise<Song> {
   //获取歌曲信息
   const selectedSong = songInfoJson[selectedKey];
   //乐队名
@@ -623,17 +670,42 @@ async function getSongInfoById(selectedKey: string, songInfoJson: JSON, bandIdJs
   let answers: string[] = selectedSongNames.filter((item: string) => item?.length);
   //合并重复名字
   answers = Array.from(new Set(answers));
-  let songCoverBase64 = null;
+  let songCoverBase64: string;
   if (cfg.songCover){
-    songCoverBase64 = `data:image/png;base64,${
-      Buffer.from(await ctx.http.get(
-        `https://bestdori.com/assets/jp/musicjacket/musicjacket${
-          Math.ceil(Number(selectedKey) / 10) * 10
-        }_rip/assets-star-forassetbundle-startapp-musicjacket-musicjacket${
-          Math.ceil(Number(selectedKey) / 10) * 10
-        }-${selectedSong["jacketImage"][0]}-jacket.png`,
-        {responseType: 'arraybuffer'})).toString('base64')
-    }`;
+    let arrayBuffer = null,index = 0;
+    const servers = ['jp', 'en', 'tw', 'cn', 'kr'];
+    const availableServers = servers.filter((_, i) => selectedSongNames[i]);
+    const base = Math.ceil(Number(selectedKey) / 10) * 10;
+
+    do {
+      let retryTimes = 3;
+      do {
+        try {
+          const server = availableServers[index];
+          const url = `https://bestdori.com/assets/${server}/musicjacket/musicjacket${
+            base
+          }_rip/assets-star-forassetbundle-startapp-musicjacket-musicjacket${
+            base
+          }-${selectedSong["jacketImage"][0]}-jacket.png`;
+          arrayBuffer = Buffer.from(await ctx.http.get(url, {responseType: 'arraybuffer'}));
+          console.log(url)
+          if (arrayBuffer.toString().startsWith("<!DOCTYPE html>")){
+            arrayBuffer = null;
+          }
+        } catch (err) {
+          console.error(err)
+        }
+      }while(!arrayBuffer && retryTimes-- > 0);
+
+    }while(!arrayBuffer && ++index < availableServers.length);
+    if (arrayBuffer) {
+      songCoverBase64 = `data:image/png;base64,${
+        arrayBuffer.toString('base64')
+      }`;
+      //fs.writeFileSync('./test.txt',Buffer.from(buffer))
+    }else{
+      songCoverBase64 = '';
+    }
   }
   if (cfg.idGuess) {
     answers = answers.concat(selectedKey);
