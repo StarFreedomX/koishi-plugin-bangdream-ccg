@@ -503,55 +503,10 @@ export function apply(ctx: Context, cfg: Config) {
 
     ctx.command("test [option:text]")
       .action(async ({session}, option) => {
-        /*const selectedKey = option;
         const [songInfoJson, bandIdJson] = await initJson(cfg);
-        //获取歌曲信息
-        const selectedSong = songInfoJson[selectedKey];
-        //乐队名
-        const selectedBandName = bandIdJson[selectedSong["bandId"]]["bandName"][0];
-        //歌曲名
-        const selectedSongNames: string[] = selectedSong["musicTitle"];
-
-        let songCoverBase64: string;
-        let arrayBuffer = null,index = 0;
-        const servers = ['jp', 'en', 'tw', 'cn', 'kr'];
-        let availableServers = servers.filter((_, i) => selectedSongNames[i]);
-        let base = Math.ceil(Number(selectedKey) / 10) * 10;
-        if (selectedKey === "13" || selectedKey === "40")base = 30;
-        if (selectedKey === "273")availableServers = ['cn']
-
-        do {
-          let retryTimes = 3;
-          do {
-            try {
-              const server = availableServers[index];
-              const url = `https://bestdori.com/assets/${server}/musicjacket/musicjacket${
-                base
-              }_rip/assets-star-forassetbundle-startapp-musicjacket-musicjacket${
-                base
-              }-${selectedSong["jacketImage"][0]}-jacket.png`;
-
-              arrayBuffer = Buffer.from(await ctx.http.get(url, {responseType: 'arraybuffer'}));
-              console.log(url)
-              if (arrayBuffer.toString().startsWith("<!DOCTYPE html>")){
-                arrayBuffer = null;
-              }
-            } catch (err) {
-              console.error(err)
-            }
-          }while(!arrayBuffer && retryTimes-- > 0);
-
-        }while(!arrayBuffer && ++index < availableServers.length);
-        if (arrayBuffer) {
-          songCoverBase64 = `data:image/png;base64,${
-            arrayBuffer.toString('base64')
-          }`;
-          //fs.writeFileSync('./test.txt',Buffer.from(buffer))
-        }else{
-          songCoverBase64 = '';
-        }
-        //console.log(songCoverBase64);
-        return h.image(songCoverBase64);*/
+        const song = await getSongInfoById(option, songInfoJson, bandIdJson, ctx, cfg);
+        if (!song) return session.text("commands.ccg.add.messages.songNotFound", {songId: option});
+        return `${song.songId}\n${song.songName}\n${song.bandName}\n${song.answers}\n${h.image(song.songCover)}`;
       });
 
     ctx.command('ccg.combine')
@@ -663,8 +618,10 @@ export function apply(ctx: Context, cfg: Config) {
 async function getSongInfoById(selectedKey: string, songInfoJson: JSON, bandIdJson: JSON, ctx:Context, cfg: Config): Promise<Song> {
   //获取歌曲信息
   const selectedSong = songInfoJson[selectedKey];
+  if (!selectedSong) return null;
   //乐队名
-  const selectedBandName = bandIdJson[selectedSong["bandId"]]["bandName"][0];
+  const selectedBandNames = bandIdJson[selectedSong["bandId"]]["bandName"];
+  const selectedBandName = selectedBandNames[cfg.defaultSongNameServer] ?? selectedBandNames.filter(Boolean)?.[0];
   //歌曲名
   const selectedSongNames: string[] = selectedSong["musicTitle"];
   const selectedSongLength: number = selectedSong["length"];
@@ -706,7 +663,6 @@ async function getSongInfoById(selectedKey: string, songInfoJson: JSON, bandIdJs
       songCoverBase64 = `data:image/png;base64,${
         arrayBuffer.toString('base64')
       }`;
-      //fs.writeFileSync('./test.txt',Buffer.from(buffer))
     }else{
       songCoverBase64 = '';
     }
@@ -714,7 +670,6 @@ async function getSongInfoById(selectedKey: string, songInfoJson: JSON, bandIdJs
   if (cfg.idGuess) {
     answers = answers.concat(selectedKey);
   }
-
   if (cfg.nickname) {
     answers = answers.concat(await getNicknames(Number(selectedKey), 3));
   }
@@ -725,14 +680,13 @@ async function getSongInfoById(selectedKey: string, songInfoJson: JSON, bandIdJs
   const songTimeArray = selectedSong["publishedAt"];
   let server = cfg.serverLimit;
   const serverName = ['日服', '国际服', '台服', '国服', '韩服'];
-  const firstChar = selectedSongNames[cfg.defaultSongNameServer][0];
+  const firstChar = (selectedSongNames?.[cfg.defaultSongNameServer] ?? answers?.[0])?.[0];
   let songTime: string = '';
-  for (let i = 0; server && i < 5; i++) {
+  for (let i = 0; server && i < 5; i++, server = server >> 1) {
     if (server % 2 && songTimeArray[i]) {
       const newDate = new Date(Number(songTimeArray[i]));
       songTime += `${songTime ? '\n' : ''}${serverName[i]}发布时间:${newDate.getFullYear()}年`
     }
-    server = server >> 1;
   }
   const songTips: string[] = [
     `乐队:${selectedBandName}`,
@@ -747,7 +701,7 @@ async function getSongInfoById(selectedKey: string, songInfoJson: JSON, bandIdJs
     bandId: selectedSong["bandId"].toString(),
     bandName: selectedBandName,
     songId: selectedKey,
-    songName: selectedSongNames[cfg.defaultSongNameServer],
+    songName: selectedSongNames[cfg.defaultSongNameServer] ?? answers[0],
     songLength: selectedSongLength,
     selectedSecond: selectedSecond,
     answers: answers,
