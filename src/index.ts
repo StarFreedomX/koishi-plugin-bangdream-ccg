@@ -76,13 +76,13 @@ export const name = 'bangdream-ccg';
 
 export const usage = `
 <h1>邦多利猜猜歌</h1>
-<h2>歌曲数据来源于bestdori.com</h2>
+<h2>默认歌曲数据来源于bestdori.com</h2>
 
 <h4>开发中，有问题或建议可以到<a href="https://github.com/StarFreedomX/koishi-plugin-bangdream-ccg" target="_blank">GitHub仓库</a>提issue<del>(114514年后才会解决)</del></h4>
 <h4>如果想继续开发优化本插件，<a href="https://github.com/StarFreedomX/koishi-plugin-bangdream-ccg/pulls" target="_blank">欢迎 PR</a></h4>
 <h2>Notice</h2>
 * 本项目需提前安装并配置FFmpeg<br/>
-* 如果遇到assets中的nickname_song.xlsx丢失需要自行到本仓库下载<br/>
+* 如果遇到[Koishi数据文件夹]/data/bangdream-ccg/中的nickname_song.xlsx丢失需要自行到本仓库下载<br/>
 <br/>
 <br/>
 <h2>Advanced</h2>
