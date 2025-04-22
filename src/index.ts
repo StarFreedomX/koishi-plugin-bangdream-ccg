@@ -503,7 +503,7 @@ export function apply(ctx: Context, cfg: Config) {
 
     ctx.command("test [option:text]")
       .action(async ({session}, option) => {
-        const selectedKey = option;
+        /*const selectedKey = option;
         const [songInfoJson, bandIdJson] = await initJson(cfg);
         //获取歌曲信息
         const selectedSong = songInfoJson[selectedKey];
@@ -515,8 +515,10 @@ export function apply(ctx: Context, cfg: Config) {
         let songCoverBase64: string;
         let arrayBuffer = null,index = 0;
         const servers = ['jp', 'en', 'tw', 'cn', 'kr'];
-        const availableServers = servers.filter((_, i) => selectedSongNames[i]);
-        const base = Math.ceil(Number(selectedKey) / 10) * 10;
+        let availableServers = servers.filter((_, i) => selectedSongNames[i]);
+        let base = Math.ceil(Number(selectedKey) / 10) * 10;
+        if (selectedKey === "13" || selectedKey === "40")base = 30;
+        if (selectedKey === "273")availableServers = ['cn']
 
         do {
           let retryTimes = 3;
@@ -549,7 +551,7 @@ export function apply(ctx: Context, cfg: Config) {
           songCoverBase64 = '';
         }
         //console.log(songCoverBase64);
-        return h.image(songCoverBase64);
+        return h.image(songCoverBase64);*/
       });
 
     ctx.command('ccg.combine')
@@ -674,8 +676,10 @@ async function getSongInfoById(selectedKey: string, songInfoJson: JSON, bandIdJs
   if (cfg.songCover){
     let arrayBuffer = null,index = 0;
     const servers = ['jp', 'en', 'tw', 'cn', 'kr'];
-    const availableServers = servers.filter((_, i) => selectedSongNames[i]);
-    const base = Math.ceil(Number(selectedKey) / 10) * 10;
+    let availableServers = servers.filter((_, i) => selectedSongNames[i]);
+    let base = Math.ceil(Number(selectedKey) / 10) * 10;
+    if (selectedKey === "13" || selectedKey === "40")base = 30;
+    if (selectedKey === "273")availableServers = ['cn']
 
     do {
       let retryTimes = 3;
