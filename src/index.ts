@@ -3,7 +3,6 @@ import {exec} from "child_process";
 import * as XLSX from 'xlsx';
 import {} from '@koishijs/cache'
 import * as fs from 'fs'
-//import * as os from 'os';
 
 export const ccgLogger = new Logger('bangdream-ccg');
 
@@ -114,6 +113,7 @@ export interface Song {
   answers: string[];
   isComplete: boolean;
   tips: string[];
+  songCover: string,
 }
 
 export interface nicknameExcelElement {
@@ -151,13 +151,14 @@ export interface Config {
   alwaysUseLocalJson: boolean;
   songInfoUrl: string;
   bandIdUrl: string;
+  songCover: boolean;
   songFileUrl: string
   nickname: boolean;
   //nicknameUrl: string;
   //saveSongFile: boolean;
   defaultSongNameServer: number;
   FFmpegPath: string;
-  devMode: boolean;
+  //devMode: boolean;
 }
 
 export const Config = Schema.intersect([
@@ -175,6 +176,7 @@ export const Config = Schema.intersect([
     timeout: Schema.number().default(300).description("猜歌超时时间，单位秒"),
     idGuess: Schema.boolean().default(true).description("是否允许使用歌曲id猜歌"),
     nickname: Schema.boolean().default(true).description("是否启用别名匹配"),
+    songCover: Schema.boolean().default(true).description("是否在发送答案时显示歌曲封面"),
     //saveSongFile: Schema.boolean().default(false).description("是否保存歌曲到本地（会占用一定的存储空间，但可以使已下载歌曲无需再次下载，执行速度更快）"),
     saveJson: Schema.boolean().default(true).description("是否保存json至本地（这使得由于网络波动等原因获取json文件失败时，使用本地json）"),
     alwaysUseLocalJson: Schema.boolean().default(false).description("是否优先使用本地json"),
@@ -185,7 +187,7 @@ export const Config = Schema.intersect([
     bandIdUrl: Schema.string().default("https://bestdori.com/api/bands/all.1.json").description("乐队信息地址，默认url来源于bestdori.com"),
     songFileUrl: Schema.string().default("https://bestdori.com/assets/jp/sound/bgm{songId}_rip/bgm{songId}.mp3").description("歌曲下载地址，花括号内的songId对应实际的songId被替换"),
     //nicknameUrl: Schema.string().default("https://github.com/Yamamoto-2/tsugu-bangdream-bot/raw/refs/heads/master/backend/config/nickname_song.xlsx").description("别名数据表来源，默认为Tsugu机器人仓库"),
-    devMode: Schema.boolean().default(false).hidden(),
+    //devMode: Schema.boolean().default(false).hidden(),
   }).description('高级配置'),
 
 ])
@@ -203,7 +205,7 @@ export function apply(ctx: Context, cfg: Config) {
 
   //console.log(fs.existsSync(`${assetsUrl}/nickname_song.xlsx`))
   if (fs.existsSync(`${assetsUrl}/nickname_song.xlsx`)) {
-    console.log('copying & removing')
+    console.log('copying')
     fs.copyFileSync(`${assetsUrl}/nickname_song.xlsx`, `${dataUrl}/nickname_song.xlsx`);
     //fs.copyFileSync(`${assetsUrl}/nickname_song.xlsx`, `${assetsUrl}/nickname_song.xlsx`);
     if (process.env.NODE_ENV !== "development")
@@ -252,7 +254,7 @@ export function apply(ctx: Context, cfg: Config) {
             //存入缓存2
             ctx.cache.set(`bangdream_ccg_${session.gid}`, 'run', preSong, Time.day);
             console.log("已存入缓存2:");
-            console.log(preSong);
+            console.log(preSong.songName);
           }
           //发送语音消息
           const audio = h.audio(`${cacheUrl}/temp_${session.gid.replace(':', '_')}.mp3`)
@@ -274,6 +276,7 @@ export function apply(ctx: Context, cfg: Config) {
               await Promise.all([
                 ctx.cache.delete(`bangdream_ccg_${session.gid}`, 'run'),
                 session.send(session.text("commands.ccg.messages.answer", {
+                  songCover: readySong.songCover ? h.image(readySong.songCover) : '',
                   selectedKey: readySong.songId,
                   selectedBandName: readySong.bandName,
                   selectedSongName: readySong.songName,
@@ -294,6 +297,7 @@ export function apply(ctx: Context, cfg: Config) {
               dispose();
               await Promise.all([ctx.cache.delete(`bangdream_ccg_${session.gid}`, 'run'),
                 session.send(session.text("commands.ccg.messages.timeout", {
+                  songCover: readySong.songCover ? h.image(readySong.songCover) : '',
                   selectedKey: readySong.songId,
                   selectedBandName: readySong.bandName,
                   selectedSongName: readySong.songName,
@@ -302,7 +306,7 @@ export function apply(ctx: Context, cfg: Config) {
                 }))
               ])
             }
-          }, cfg.timeout * 1000)
+          }, cfg.timeout * 1000);
 
 
           //这里已经发送完毕，缓存2已经准备好了题目的信息
@@ -310,7 +314,7 @@ export function apply(ctx: Context, cfg: Config) {
           const preSong = await handleSong(JSONs, ctx, cfg, gid);
           await ctx.cache.set(`bangdream_ccg_${session.gid}`, 'pre', preSong, Time.day);
           console.log("已存入缓存1:");
-          console.log(preSong);
+          console.log(preSong.songName);
         } else {
           //已经开始，return结束
           return session.text('.alreadyRunning');
@@ -333,6 +337,7 @@ export function apply(ctx: Context, cfg: Config) {
       //await ctx.cache.set(`bangdream_ccg_${session.gid}`, 'run',readySong, Time.day);
       await ctx.cache.delete(`bangdream_ccg_${session.gid}`, 'run');
       return session.text('.answer', {
+        songCover: readySong.songCover ? h.image(readySong.songCover) : '',
         selectedKey: readySong.songId,
         selectedBandName: readySong.bandName,
         selectedSongName: readySong.songName,
@@ -364,7 +369,7 @@ export function apply(ctx: Context, cfg: Config) {
         return session.text(".addOptionErr");
       }
       const JSONs: JSON[] = await initJson(cfg)
-      const songInfo: Song = await getSongInfoById(`${songId}`, JSONs[0], JSONs[1], cfg);
+      const songInfo: Song = await getSongInfoById(`${songId}`, JSONs[0], JSONs[1], ctx, cfg);
       if (!songInfo) {
         return session.text(".songNotFound", {songId: songId});
       }
@@ -380,7 +385,7 @@ export function apply(ctx: Context, cfg: Config) {
         return session.text(".delOptionErr");
       }
       const JSONs: JSON[] = await initJson(cfg)
-      const songInfo: Song = await getSongInfoById(`${songId}`, JSONs[0], JSONs[1], cfg);
+      const songInfo: Song = await getSongInfoById(`${songId}`, JSONs[0], JSONs[1], ctx, cfg);
       if (!songInfo) {
         return session.text(".songNotFound", {songId: songId});
       }
@@ -493,11 +498,60 @@ export function apply(ctx: Context, cfg: Config) {
       })
     })
 
-  if (cfg.devMode) {
+  //开发环境
+  if (process.env.NODE_ENV === 'development') {
 
     ctx.command("test [option:text]")
       .action(async ({session}, option) => {
-        return;
+        /*const selectedKey = option;
+        const [songInfoJson, bandIdJson] = await initJson(cfg);
+        //获取歌曲信息
+        const selectedSong = songInfoJson[selectedKey];
+        //乐队名
+        const selectedBandName = bandIdJson[selectedSong["bandId"]]["bandName"][0];
+        //歌曲名
+        const selectedSongNames: string[] = selectedSong["musicTitle"];
+
+        let songCoverBase64: string;
+        let arrayBuffer = null,index = 0;
+        const servers = ['jp', 'en', 'tw', 'cn', 'kr'];
+        let availableServers = servers.filter((_, i) => selectedSongNames[i]);
+        let base = Math.ceil(Number(selectedKey) / 10) * 10;
+        if (selectedKey === "13" || selectedKey === "40")base = 30;
+        if (selectedKey === "273")availableServers = ['cn']
+
+        do {
+          let retryTimes = 3;
+          do {
+            try {
+              const server = availableServers[index];
+              const url = `https://bestdori.com/assets/${server}/musicjacket/musicjacket${
+                base
+              }_rip/assets-star-forassetbundle-startapp-musicjacket-musicjacket${
+                base
+              }-${selectedSong["jacketImage"][0]}-jacket.png`;
+
+              arrayBuffer = Buffer.from(await ctx.http.get(url, {responseType: 'arraybuffer'}));
+              console.log(url)
+              if (arrayBuffer.toString().startsWith("<!DOCTYPE html>")){
+                arrayBuffer = null;
+              }
+            } catch (err) {
+              console.error(err)
+            }
+          }while(!arrayBuffer && retryTimes-- > 0);
+
+        }while(!arrayBuffer && ++index < availableServers.length);
+        if (arrayBuffer) {
+          songCoverBase64 = `data:image/png;base64,${
+            arrayBuffer.toString('base64')
+          }`;
+          //fs.writeFileSync('./test.txt',Buffer.from(buffer))
+        }else{
+          songCoverBase64 = '';
+        }
+        //console.log(songCoverBase64);
+        return h.image(songCoverBase64);*/
       });
 
     ctx.command('ccg.combine')
@@ -603,9 +657,10 @@ export function apply(ctx: Context, cfg: Config) {
  * @param selectedKey 歌曲Id
  * @param songInfoJson 歌曲信息json文件
  * @param bandIdJson 乐队信息json文件
+ * @param ctx Context
  * @param cfg 配置表单
  */
-async function getSongInfoById(selectedKey: string, songInfoJson: JSON, bandIdJson: JSON, cfg: Config): Promise<Song> {
+async function getSongInfoById(selectedKey: string, songInfoJson: JSON, bandIdJson: JSON, ctx:Context, cfg: Config): Promise<Song> {
   //获取歌曲信息
   const selectedSong = songInfoJson[selectedKey];
   //乐队名
@@ -617,7 +672,45 @@ async function getSongInfoById(selectedKey: string, songInfoJson: JSON, bandIdJs
   let answers: string[] = selectedSongNames.filter((item: string) => item?.length);
   //合并重复名字
   answers = Array.from(new Set(answers));
+  let songCoverBase64: string;
+  if (cfg.songCover){
+    let arrayBuffer = null,index = 0;
+    const servers = ['jp', 'en', 'tw', 'cn', 'kr'];
+    let availableServers = servers.filter((_, i) => selectedSongNames[i]);
+    let base = Math.ceil(Number(selectedKey) / 10) * 10;
+    if (selectedKey === "13" || selectedKey === "40")base = 30;
+    if (selectedKey === "273")availableServers = ['cn']
 
+    do {
+      let retryTimes = 3;
+      do {
+        try {
+          const server = availableServers[index];
+          const url = `https://bestdori.com/assets/${server}/musicjacket/musicjacket${
+            base
+          }_rip/assets-star-forassetbundle-startapp-musicjacket-musicjacket${
+            base
+          }-${selectedSong["jacketImage"][0]}-jacket.png`;
+          arrayBuffer = Buffer.from(await ctx.http.get(url, {responseType: 'arraybuffer'}));
+          console.log(url)
+          if (arrayBuffer.toString().startsWith("<!DOCTYPE html>")){
+            arrayBuffer = null;
+          }
+        } catch (err) {
+          console.error(err)
+        }
+      }while(!arrayBuffer && retryTimes-- > 0);
+
+    }while(!arrayBuffer && ++index < availableServers.length);
+    if (arrayBuffer) {
+      songCoverBase64 = `data:image/png;base64,${
+        arrayBuffer.toString('base64')
+      }`;
+      //fs.writeFileSync('./test.txt',Buffer.from(buffer))
+    }else{
+      songCoverBase64 = '';
+    }
+  }
   if (cfg.idGuess) {
     answers = answers.concat(selectedKey);
   }
@@ -659,7 +752,8 @@ async function getSongInfoById(selectedKey: string, songInfoJson: JSON, bandIdJs
     selectedSecond: selectedSecond,
     answers: answers,
     isComplete: false,
-    tips: songTips
+    tips: songTips,
+    songCover: songCoverBase64,
   };
 
 }
@@ -668,9 +762,10 @@ async function getSongInfoById(selectedKey: string, songInfoJson: JSON, bandIdJs
  * 随机获取一首歌（符合配置的条件）
  * @param songInfoJson 歌曲信息json
  * @param bandIdJson 乐队信息json
+ * @param ctx Context
  * @param cfg 配置表单
  */
-async function getRandomSong(songInfoJson: JSON, bandIdJson: JSON, cfg: Config): Promise<Song> {
+async function getRandomSong(songInfoJson: JSON, bandIdJson: JSON, ctx:Context, cfg: Config): Promise<Song> {
   let selectedKey: string;
   //筛选服务器
   const serverIndexes = [0, 1, 2, 3, 4].filter(i => ((cfg.serverLimit >> i) & 1));
@@ -680,7 +775,7 @@ async function getRandomSong(songInfoJson: JSON, bandIdJson: JSON, cfg: Config):
     const valid = serverIndexes.some(i => titles?.[i]);
     if (valid) break;
   } while (true);
-  return getSongInfoById(selectedKey, songInfoJson, bandIdJson, cfg);
+  return getSongInfoById(selectedKey, songInfoJson, bandIdJson, ctx, cfg);
 
 }
 
@@ -765,7 +860,7 @@ async function trimAudio(FFmpegPath: string, input: string, output: string, star
  * @param gid session的gid
  */
 async function handleSong(JSONs: JSON[], ctx: Context, cfg: Config, gid: string) {
-  const song = await getRandomSong(JSONs[0], JSONs[1], cfg);  //随机获取一首歌
+  const song = await getRandomSong(JSONs[0], JSONs[1], ctx, cfg);  //随机获取一首歌
   //转换为实际歌曲文件地址
   const songFileUrl = turnSongFileUrl(song, cfg);
   //保存文件
