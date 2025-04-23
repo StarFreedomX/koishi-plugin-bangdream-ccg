@@ -2,7 +2,7 @@ commands:
   ccg:
     description: BanG Dream!猜猜歌
     messages:
-      answer: '答案正确！
+      answer: '{quote}答案正确！
       {songCover}<br/>
       歌曲id:{selectedKey}<br/>
       乐队：{selectedBandName}<br/>

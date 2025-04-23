@@ -246,13 +246,14 @@ export function apply(ctx: Context, cfg: Config) {
           if (!readySong || !existCache) { //这里没有获取到缓存1的内容或者缓存文件已经不存在，那么需要生成一个直接放到缓存2
             const song = await handleSong(JSONs, ctx, cfg, gid);
             //存入缓存2
-            ctx.cache.set(`bangdream_ccg_${session.gid}`, 'run', song, Time.day);
-            console.log(song);
+            ctx.cache.set(`bangdream_ccg_${session.gid}`, 'run', song, Time.second * cfg.timeout);
+            console.log("已存入缓存2:");
+            console.log(song.songName);
           } else {
             //读取缓存1的内容
             const preSong: Song = await ctx.cache.get(`bangdream_ccg_${session.gid}`, 'pre');
             //存入缓存2
-            ctx.cache.set(`bangdream_ccg_${session.gid}`, 'run', preSong, Time.day);
+            ctx.cache.set(`bangdream_ccg_${session.gid}`, 'run', preSong, Time.second * cfg.timeout);
             console.log("已存入缓存2:");
             console.log(preSong.songName);
           }
@@ -276,6 +277,7 @@ export function apply(ctx: Context, cfg: Config) {
               await Promise.all([
                 ctx.cache.delete(`bangdream_ccg_${session.gid}`, 'run'),
                 session.send(session.text("commands.ccg.messages.answer", {
+                  quote: h.quote(session.messageId),
                   songCover: readySong.songCover ? h.image(readySong.songCover) : '',
                   selectedKey: readySong.songId,
                   selectedBandName: readySong.bandName,
@@ -459,7 +461,7 @@ export function apply(ctx: Context, cfg: Config) {
           }
         }
         runningSong.tips = newTips;
-        await ctx.cache.set(`bangdream_ccg_${session.gid}`, 'run', runningSong);
+        await ctx.cache.set(`bangdream_ccg_${session.gid}`, 'run', runningSong, Time.second * cfg.timeout);
 
         if (!selectedElement) {
           return session.text(".noMoreTips");
