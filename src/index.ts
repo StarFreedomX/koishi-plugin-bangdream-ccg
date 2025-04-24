@@ -246,14 +246,14 @@ export function apply(ctx: Context, cfg: Config) {
           if (!readySong || !existCache) { //这里没有获取到缓存1的内容或者缓存文件已经不存在，那么需要生成一个直接放到缓存2
             const song = await handleSong(JSONs, ctx, cfg, gid);
             //存入缓存2
-            ctx.cache.set(`bangdream_ccg_${session.gid}`, 'run', song, Time.second * cfg.timeout);
+            ctx.cache.set(`bangdream_ccg_${session.gid}`, 'run', song, Time.second * cfg.timeout + Time.minute * 5);
             console.log("已存入缓存2:");
             console.log(song.songName);
           } else {
             //读取缓存1的内容
             const preSong: Song = await ctx.cache.get(`bangdream_ccg_${session.gid}`, 'pre');
             //存入缓存2
-            ctx.cache.set(`bangdream_ccg_${session.gid}`, 'run', preSong, Time.second * cfg.timeout);
+            ctx.cache.set(`bangdream_ccg_${session.gid}`, 'run', preSong, Time.second * cfg.timeout + Time.minute * 5);
             console.log("已存入缓存2:");
             console.log(preSong.songName);
           }
@@ -335,8 +335,6 @@ export function apply(ctx: Context, cfg: Config) {
       if (!readySong || readySong.isComplete) {
         return session.text(".notRunning");
       }
-      //readySong.isComplete = true;
-      //await ctx.cache.set(`bangdream_ccg_${session.gid}`, 'run',readySong, Time.day);
       await ctx.cache.delete(`bangdream_ccg_${session.gid}`, 'run');
       return session.text('.answer', {
         songCover: readySong.songCover ? h.image(readySong.songCover) : '',
@@ -357,8 +355,6 @@ export function apply(ctx: Context, cfg: Config) {
       if (!readySong || readySong.isComplete) {
         return session.text(".notRunning");
       }
-      //readySong.isComplete = true;
-      //await ctx.cache.set(`bangdream_ccg_${session.gid}`, 'run', readySong, Time.day);
       await ctx.cache.delete(`bangdream_ccg_${session.gid}`, 'run');
       return session.text('.stopComplete')
     });
@@ -461,7 +457,7 @@ export function apply(ctx: Context, cfg: Config) {
           }
         }
         runningSong.tips = newTips;
-        await ctx.cache.set(`bangdream_ccg_${session.gid}`, 'run', runningSong, Time.second * cfg.timeout);
+        await ctx.cache.set(`bangdream_ccg_${session.gid}`, 'run', runningSong, Time.second * cfg.timeout + Time.minute * 5);
 
         if (!selectedElement) {
           return session.text(".noMoreTips");
