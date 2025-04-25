@@ -192,6 +192,12 @@ export const Config = Schema.intersect([
 
 ])
 
+// 创建共享上下文
+const sharedContext: Map<string, {
+  listener: () => boolean,
+  timer: () => void
+}> = new Map();
+
 
 export function apply(ctx: Context, cfg: Config) {
   ctx.i18n.define('zh-CN', require('./locales/zh-CN'));
@@ -268,12 +274,16 @@ export function apply(ctx: Context, cfg: Config) {
           const dispose = ctx.channel(session.channelId).middleware(async (session, next) => {
             const readySong = await ctx.cache.get(`bangdream_ccg_${session.gid}`, 'run');
             if (!readySong || readySong.isComplete) {
-              dispose();
-              disposeTimer();
+              const dispose = sharedContext.get(session.gid);
+              dispose?.timer();
+              dispose?.listener();
+              sharedContext.delete(session.gid);
               return next();
             } else if (readySong.answers.some(alias => betterCompare(alias, session.content))) {
-              dispose();
-              disposeTimer();
+              const dispose = sharedContext.get(session.gid);
+              dispose?.timer();
+              dispose?.listener();
+              sharedContext.delete(session.gid);
               await Promise.all([
                 ctx.cache.delete(`bangdream_ccg_${session.gid}`, 'run'),
                 session.send(session.text("commands.ccg.messages.answer", {
@@ -293,10 +303,11 @@ export function apply(ctx: Context, cfg: Config) {
 
           //计时器，特定时间后执行回调函数实现超时自动输出答案
           const disposeTimer = ctx.setTimeout(async () => {
-
             let readySong: Song = await ctx.cache.get(`bangdream_ccg_${session.gid}`, 'run');
             if (readySong && !readySong.isComplete) {
-              dispose();
+              const dispose = sharedContext.get(session.gid);
+              dispose?.listener();
+              sharedContext.delete(session.gid);
               await Promise.all([ctx.cache.delete(`bangdream_ccg_${session.gid}`, 'run'),
                 session.send(session.text("commands.ccg.messages.timeout", {
                   songCover: readySong.songCover ? h.image(readySong.songCover) : '',
@@ -309,6 +320,12 @@ export function apply(ctx: Context, cfg: Config) {
               ])
             }
           }, cfg.timeout * 1000);
+
+          // 存储到共享上下文中
+          sharedContext.set(session.gid, {
+            listener: dispose,
+            timer: disposeTimer,
+          });
 
 
           //这里已经发送完毕，缓存2已经准备好了题目的信息
@@ -335,6 +352,10 @@ export function apply(ctx: Context, cfg: Config) {
       if (!readySong || readySong.isComplete) {
         return session.text(".notRunning");
       }
+      const dispose = sharedContext.get(session.gid);
+      dispose?.timer();
+      dispose?.listener();
+      sharedContext.delete(session.gid);
       await ctx.cache.delete(`bangdream_ccg_${session.gid}`, 'run');
       return session.text('.answer', {
         songCover: readySong.songCover ? h.image(readySong.songCover) : '',
@@ -355,6 +376,10 @@ export function apply(ctx: Context, cfg: Config) {
       if (!readySong || readySong.isComplete) {
         return session.text(".notRunning");
       }
+      const dispose = sharedContext.get(session.gid);
+      dispose?.timer();
+      dispose?.listener();
+      sharedContext.delete(session.gid);
       await ctx.cache.delete(`bangdream_ccg_${session.gid}`, 'run');
       return session.text('.stopComplete')
     });
