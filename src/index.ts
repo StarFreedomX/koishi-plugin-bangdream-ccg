@@ -154,6 +154,7 @@ export interface Config {
   songCover: boolean;
   songFileUrl: string
   nickname: boolean;
+  fetchTimeout: number;
   //nicknameUrl: string;
   //saveSongFile: boolean;
   defaultSongNameServer: number;
@@ -173,13 +174,14 @@ export const Config = Schema.intersect([
     ]).default(0).description("默认歌曲名称服务器，显示答案时默认使用该项配置的服务器歌曲名称"),
     //cd: Schema.number().default(5).description("冷却时间，建议设置为大于5s，否则可能预下载失败"),
     audioLength: Schema.number().default(5).description("发送音频的长度"),
-    timeout: Schema.number().default(300).description("猜歌超时时间，单位秒"),
+    timeout: Schema.number().default(300).min(1).description("猜歌超时时间，单位秒"),
     idGuess: Schema.boolean().default(true).description("是否允许使用歌曲id猜歌"),
     nickname: Schema.boolean().default(true).description("是否启用别名匹配"),
     songCover: Schema.boolean().default(true).description("是否在发送答案时显示歌曲封面"),
     //saveSongFile: Schema.boolean().default(false).description("是否保存歌曲到本地（会占用一定的存储空间，但可以使已下载歌曲无需再次下载，执行速度更快）"),
     saveJson: Schema.boolean().default(true).description("是否保存json至本地（这使得由于网络波动等原因获取json文件失败时，使用本地json）"),
     alwaysUseLocalJson: Schema.boolean().default(false).description("是否优先使用本地json"),
+    fetchTimeout: Schema.number().default(5000).min(0).description('网络获取json超时时间(单位ms)'),
   }).description('基础配置'),
   Schema.object({
     FFmpegPath: Schema.string().description("FFmpeg路径，当控制台出现Pipe报错则需要手动配置，否则留空即可"),
@@ -208,12 +210,8 @@ export function apply(ctx: Context, cfg: Config) {
   fs.mkdirSync(dataUrl, {recursive: true});
   fs.mkdirSync(cacheUrl, {recursive: true});
   console.log('目录初始化成功');
-
-  //console.log(fs.existsSync(`${assetsUrl}/nickname_song.xlsx`))
   if (fs.existsSync(`${assetsUrl}/nickname_song.xlsx`)) {
-    console.log('copying')
     fs.copyFileSync(`${assetsUrl}/nickname_song.xlsx`, `${dataUrl}/nickname_song.xlsx`);
-    //fs.copyFileSync(`${assetsUrl}/nickname_song.xlsx`, `${assetsUrl}/nickname_song.xlsx`);
     if (process.env.NODE_ENV !== "development")
       fs.rmSync(`${assetsUrl}/nickname_song.xlsx`);
   }
@@ -254,18 +252,19 @@ export function apply(ctx: Context, cfg: Config) {
             //存入缓存2
             ctx.cache.set(`bangdream_ccg_${session.gid}`, 'run', song, Time.second * cfg.timeout + Time.minute * 5);
             console.log("已存入缓存2:");
-            console.log(song.songName);
+            const { songCover, ...songWithoutCover } = song;
+            console.log(songWithoutCover);
           } else {
             //读取缓存1的内容
             const preSong: Song = await ctx.cache.get(`bangdream_ccg_${session.gid}`, 'pre');
             //存入缓存2
             ctx.cache.set(`bangdream_ccg_${session.gid}`, 'run', preSong, Time.second * cfg.timeout + Time.minute * 5);
             console.log("已存入缓存2:");
-            console.log(preSong.songName);
+            const { songCover, ...songWithoutCover } = preSong;
+            console.log(songWithoutCover);
           }
           //发送语音消息
           const audio = h.audio(`${cacheUrl}/temp_${session.gid.replace(':', '_')}.mp3`)
-          //console.log('start06');
           await sendMessagePromise;
           await session.send(audio);
           console.log('发送成功');
@@ -333,7 +332,8 @@ export function apply(ctx: Context, cfg: Config) {
           const preSong = await handleSong(JSONs, ctx, cfg, gid);
           await ctx.cache.set(`bangdream_ccg_${session.gid}`, 'pre', preSong, Time.day);
           console.log("已存入缓存1:");
-          console.log(preSong.songName);
+          const { songCover, ...songWithoutCover } = preSong;
+          console.log(songWithoutCover);
         } else {
           //已经开始，return结束
           return session.text('.alreadyRunning');
@@ -426,7 +426,6 @@ export function apply(ctx: Context, cfg: Config) {
         const runningSong: Song = await ctx.cache.get(`bangdream_ccg_${session.gid}`, 'run');
 
         const tips = runningSong.tips;
-        //console.log(tips);
         if (!tips) {
           return session.text(".noMoreTips");
         }
@@ -514,7 +513,6 @@ export function apply(ctx: Context, cfg: Config) {
       if (!answers) {
         return session.text(".songNotFound", {songId: songId});
       }
-      //console.log(await getNicknames(songId));
       return session.text(".returnList", {
         songId: songId,
         answers: answers
@@ -534,10 +532,10 @@ export function apply(ctx: Context, cfg: Config) {
 
     ctx.command('ccg.combine')
       .action(async ({session}) => {
-        //console.log(excelJson);
+
         const jsonStr = await fs.promises.readFile(dataUrl + '/nicknameLocal.json', 'utf-8');
         const jsonJson = JSON.parse(jsonStr.trim() || "{}");
-        //console.log(jsonJson);
+
         const keys = Object.keys(jsonJson);
         // 读取Excel文件
         const workbook = XLSX.readFile(dataUrl + '/nickname_song.xlsx');
@@ -556,8 +554,6 @@ export function apply(ctx: Context, cfg: Config) {
           let appendSong = nicknameJson.find(item => item.Id == songId);
 
           if (appendSong) {
-            //console.log(appendSong);
-            //appendSong.Nickname = appendSong.Nickname ? appendSong.Nickname + ',' + nickname : nickname;
             if (appendSong.Nickname) {
               //查重
               const excelNickname: string[] = appendSong.Nickname.split(',');
@@ -569,7 +565,6 @@ export function apply(ctx: Context, cfg: Config) {
               appendSong.Nickname = nickname;
             }
             console.log(`已合并:${nickname} to ${songId} - ${title}`);
-            //console.log(appendSong);
           } else {
             const index = nicknameJson.findIndex(item => item.Id > songId);
             let appending: nicknameExcelElement = {
@@ -597,9 +592,6 @@ export function apply(ctx: Context, cfg: Config) {
           }
           //列宽
           newWorksheet['!cols'].push({wch: 10}, {wch: 50}, {wch: 65}, {wch: 55});
-          //右对齐
-          //newWorksheet['!cols'][0] = { wch: 10, align: { horizontal: 'right' } };
-          //console.log(newWorksheet);
           XLSX.writeFile(workbook, `${dataUrl}/nickname_song.xlsx`)
         }
       })
@@ -672,12 +664,12 @@ async function getSongInfoById(selectedKey: string, songInfoJson: JSON, bandIdJs
             base
           }-${selectedSong["jacketImage"][0]}-jacket.png`;
           arrayBuffer = Buffer.from(await ctx.http.get(url, {responseType: 'arraybuffer'}));
-          console.log(url)
+          console.log(`musicjacket: ${url}`)
           if (arrayBuffer.toString().startsWith("<!DOCTYPE html>")){
             arrayBuffer = null;
           }
         } catch (err) {
-          console.error(err)
+          ccgLogger.error(err)
         }
       }while(!arrayBuffer && retryTimes-- > 0);
 
@@ -759,17 +751,30 @@ async function getRandomSong(songInfoJson: JSON, bandIdJson: JSON, ctx:Context, 
 /**
  * 从特定url获取json，并返回json对象
  * @param url json文件的url
+ * @param timeout 超时时间
  */
-async function fetchJson(url: string): Promise<JSON> {
-  // 发起网络请求并等待响应
-  const response = await fetch(url);
-  // 检查响应状态
-  if (!response.ok) {
-    ccgLogger.error(`HTTP error! Fetch ${url} Failed, status: ${response.status}`);
+async function fetchJson(url: string, timeout = 5000): Promise<JSON> {
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), timeout);
+
+  try {
+    const response = await fetch(url, { signal: controller.signal });
+    if (!response.ok) {
+      ccgLogger.error(`HTTP error! Fetch ${url} Failed, status: ${response.status}`);
+    }
+    return await response.json();
+  } catch (error) {
+    if (error.name === 'AbortError') {
+      ccgLogger.error(`Fetch ${url} timed out after ${timeout}ms`);
+    } else {
+      ccgLogger.error(`Fetch ${url} failed: ${error.message}`);
+    }
+    throw error;
+  } finally {
+    clearTimeout(id);
   }
-  // 解析 JSON 数据并返回
-  return response.json();
 }
+
 
 /**
  * 从特定url下载文件，并保存到本地目录下
@@ -797,7 +802,6 @@ async function runCommand(command: string) {
   return new Promise<void>((resolve, reject) => {
     exec(command, (error/*, stdout, stderr*/) => {
       if (error) {
-        console.error(`Command error: ${error}`);
         ccgLogger.error('命令执行发生错误:\n' + error);
         reject(error);
       } else {
@@ -911,8 +915,6 @@ async function addNickname(songId: number, title: string, nickname: string) {
   } else {
     nicknameLocalJson = {};
   }
-  console.log("start:")
-  //console.log(nicknameLocalJson);
   const oldNicknameLocalJson = JSON.stringify(nicknameLocalJson);
   const appendSong: nicknameJsonElement = nicknameLocalJson[songId];
   if (appendSong) {
@@ -937,9 +939,6 @@ async function addNickname(songId: number, title: string, nickname: string) {
     return EXIST;
   }
   //查重通过
-
-  console.log("end:");
-  //console.log(nicknameLocalJson);
   if (oldNicknameLocalJson == JSON.stringify(nicknameLocalJson)) {
     ccgLogger.warn(`json信息:${nicknameLocalJson},可能不符合所需要的json格式`);
     return FAILED;
@@ -982,7 +981,6 @@ async function getNicknames(songId: number, option: number) {
     //这里是读取json文件过程
     //这里不用required，否则在文件被写入的时候无法及时改变状态或触发模块重载
     const readJson = await fs.promises.readFile(nicknameLocalPath, 'utf-8');
-    //console.log("json:" + readJson);
     let nicknameLocalJson: nicknameJson;
     try {
       nicknameLocalJson = JSON.parse(readJson.trim() || "{}");
@@ -1030,7 +1028,6 @@ async function delNickName(songId: number, nickname: string, songInfo: Song) {
   let nicknameLocalJson: nicknameJson;
   //初始化
   if (fs.existsSync(nicknameLocalPath)) {
-    //console.log('存在')
     //这里不用required，否则在文件被写入的时候无法及时改变状态或触发模块重载
     const readJson = await fs.promises.readFile(nicknameLocalPath, 'utf-8');
     try {
@@ -1105,11 +1102,10 @@ async function initJson(cfg: Config) {
       songInfoJson = require(`${dataUrl}/songInfo.json`);
       bandIdJson = require(`${dataUrl}/bandId.json`);
     } catch (e) {
-      console.error("读取本地json文件异常，将从远程仓库获取");
-      console.error(e);
+      ccgLogger.error("读取本地json文件异常，将从远程仓库获取");
+      ccgLogger.error(e);
       try {
-        [songInfoJson, bandIdJson] = await Promise.all([fetchJson(cfg.songInfoUrl), fetchJson(cfg.bandIdUrl)]);
-        //console.log('读取json文件完成')
+        [songInfoJson, bandIdJson] = await Promise.all([fetchJson(cfg.songInfoUrl, cfg.fetchTimeout), fetchJson(cfg.bandIdUrl, cfg.fetchTimeout)]);
         if (cfg.saveJson) {
           await Promise.all([
             writeJSON(JSON.stringify(songInfoJson), `${dataUrl}/songInfo.json`),
@@ -1117,15 +1113,15 @@ async function initJson(cfg: Config) {
           ]);
         }
       } catch (e) {
-        console.error("远程Json文件获取异常");
-        console.error(e);
+        ccgLogger.error("远程Json文件获取异常");
+        ccgLogger.error(e);
       }
 
     }
   } else {
     try {
       //获取json
-      [songInfoJson, bandIdJson] = await Promise.all([fetchJson(cfg.songInfoUrl), fetchJson(cfg.bandIdUrl)]);
+      [songInfoJson, bandIdJson] = await Promise.all([fetchJson(cfg.songInfoUrl, cfg.fetchTimeout), fetchJson(cfg.bandIdUrl, cfg.fetchTimeout)]);
       //保存副本到本地
       //程序运行到此处已经成功读取了json
       // 写入文件(函数内已经做了异常处理)
@@ -1136,15 +1132,15 @@ async function initJson(cfg: Config) {
         ]);
       }
     } catch (e) {
-      console.error("Json文件获取异常，将使用本地json");
-      console.error(e);
+      ccgLogger.error("远程Json文件获取异常，将使用本地json(若反复出现网络问题，建议打开配置项的alwaysUseLocalJson)");
+      ccgLogger.error(e);
       try {
         //这个json在正常运行时不变，所以直接require
         songInfoJson = require(`${dataUrl}/songInfo.json`);
         bandIdJson = require(`${dataUrl}/bandId.json`);
       } catch (e) {
-        console.error("读取本地json文件异常");
-        console.error(e);
+        ccgLogger.error("读取本地json文件异常");
+        ccgLogger.error(e);
         return;
       }
     }
@@ -1195,12 +1191,9 @@ function betterDistinguish(str: string) {
   ]);
 
   reflectMap.forEach((value: string, key: string) => {
-    //console.log(`key: ${key} ; value: ${value}`);
     const regex = new RegExp(`${key}`, 'g');
-    //console.log(regex);
     str = str.replace(regex, value);
   })
-  //console.log(str)
   return str;
 }
 
