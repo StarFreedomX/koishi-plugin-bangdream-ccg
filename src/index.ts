@@ -154,7 +154,7 @@ export interface Config {
   songCover: boolean;
   songFileUrl: string
   nickname: boolean;
-  fetchTimeout: number;
+  //fetchTimeout: number;
   //nicknameUrl: string;
   //saveSongFile: boolean;
   defaultSongNameServer: number;
@@ -181,7 +181,7 @@ export const Config = Schema.intersect([
     //saveSongFile: Schema.boolean().default(false).description("是否保存歌曲到本地（会占用一定的存储空间，但可以使已下载歌曲无需再次下载，执行速度更快）"),
     saveJson: Schema.boolean().default(true).description("是否保存json至本地（这使得由于网络波动等原因获取json文件失败时，使用本地json）"),
     alwaysUseLocalJson: Schema.boolean().default(false).description("是否优先使用本地json"),
-    fetchTimeout: Schema.number().default(5000).min(0).description('网络获取json超时时间(单位ms)'),
+    //fetchTimeout: Schema.number().default(15000).min(0).description('网络获取json超时时间(单位ms)'),
   }).description('基础配置'),
   Schema.object({
     FFmpegPath: Schema.string().description("FFmpeg路径，当控制台出现Pipe报错则需要手动配置，否则留空即可"),
@@ -242,7 +242,7 @@ export function apply(ctx: Context, cfg: Config) {
           //判断缓存1是否有歌曲，如果没有，那么先生成在发送，存入缓存2；如果有，直接发送，并将缓存1的内容转移到缓存2
           let readySong: Song, JSONs: JSON[];
           const readySongPromise = ctx.cache.get(`bangdream_ccg_${session.gid}`, 'pre');
-          const JSONsPromise = initJson(cfg);  //初始化json
+          const JSONsPromise = initJson(ctx, cfg);  //初始化json
           const existCache = fs.existsSync(`${cacheUrl}/[full]temp_${gid}.mp3`) &&
             fs.existsSync(`${cacheUrl}/temp_${gid}.mp3`);
           [readySong, JSONs] = await Promise.all([readySongPromise, JSONsPromise]);
@@ -391,7 +391,7 @@ export function apply(ctx: Context, cfg: Config) {
       if ((!songId) || (!nickname)) {
         return session.text(".addOptionErr");
       }
-      const JSONs: JSON[] = await initJson(cfg)
+      const JSONs: JSON[] = await initJson(ctx, cfg)
       const songInfo: Song = await getSongInfoById(`${songId}`, JSONs[0], JSONs[1], ctx, cfg);
       if (!songInfo) {
         return session.text(".songNotFound", {songId: songId});
@@ -407,7 +407,7 @@ export function apply(ctx: Context, cfg: Config) {
       if ((!songId) || (!nickname)) {
         return session.text(".delOptionErr");
       }
-      const JSONs: JSON[] = await initJson(cfg)
+      const JSONs: JSON[] = await initJson(ctx, cfg)
       const songInfo: Song = await getSongInfoById(`${songId}`, JSONs[0], JSONs[1], ctx, cfg);
       if (!songInfo) {
         return session.text(".songNotFound", {songId: songId});
@@ -524,7 +524,7 @@ export function apply(ctx: Context, cfg: Config) {
 
     ctx.command("test [option:text]")
       .action(async ({session}, option) => {
-        const [songInfoJson, bandIdJson] = await initJson(cfg);
+        const [songInfoJson, bandIdJson] = await initJson(ctx, cfg);
         const song = await getSongInfoById(option, songInfoJson, bandIdJson, ctx, cfg);
         if (!song) return session.text("commands.ccg.add.messages.songNotFound", {songId: option});
         return `${song.songId}\n${song.songName}\n${song.bandName}\n${song.answers}\n${h.image(song.songCover)}`;
@@ -750,29 +750,12 @@ async function getRandomSong(songInfoJson: JSON, bandIdJson: JSON, ctx:Context, 
 
 /**
  * 从特定url获取json，并返回json对象
+ * @param ctx
  * @param url json文件的url
- * @param timeout 超时时间
  */
-async function fetchJson(url: string, timeout = 5000): Promise<JSON> {
-  const controller = new AbortController();
-  const id = setTimeout(() => controller.abort(), timeout);
-
-  try {
-    const response = await fetch(url, { signal: controller.signal });
-    if (!response.ok) {
-      ccgLogger.error(`HTTP error! Fetch ${url} Failed, status: ${response.status}`);
-    }
-    return await response.json();
-  } catch (error) {
-    if (error.name === 'AbortError') {
-      ccgLogger.error(`Fetch ${url} timed out after ${timeout}ms`);
-    } else {
-      ccgLogger.error(`Fetch ${url} failed: ${error.message}`);
-    }
-    throw error;
-  } finally {
-    clearTimeout(id);
-  }
+async function fetchJson(ctx: Context, url: string): Promise<JSON> {
+  console.log(url);
+  return ctx.http.get(url, {responseType: 'json',timeout: 10000})
 }
 
 
@@ -1091,9 +1074,10 @@ async function delNickName(songId: number, nickname: string, songInfo: Song) {
 
 /**
  * 初始化，根据配置获取对应json
+ * @param ctx
  * @param cfg 配置表单
  */
-async function initJson(cfg: Config) {
+async function initJson(ctx: Context, cfg: Config) {
   let songInfoJson: JSON;
   let bandIdJson: JSON;
   //json处理操作
@@ -1105,7 +1089,7 @@ async function initJson(cfg: Config) {
       ccgLogger.error("读取本地json文件异常，将从远程仓库获取");
       ccgLogger.error(e);
       try {
-        [songInfoJson, bandIdJson] = await Promise.all([fetchJson(cfg.songInfoUrl, cfg.fetchTimeout), fetchJson(cfg.bandIdUrl, cfg.fetchTimeout)]);
+        [songInfoJson, bandIdJson] = await Promise.all([fetchJson(ctx, cfg.songInfoUrl), fetchJson(ctx, cfg.bandIdUrl)]);
         if (cfg.saveJson) {
           await Promise.all([
             writeJSON(JSON.stringify(songInfoJson), `${dataUrl}/songInfo.json`),
@@ -1121,7 +1105,7 @@ async function initJson(cfg: Config) {
   } else {
     try {
       //获取json
-      [songInfoJson, bandIdJson] = await Promise.all([fetchJson(cfg.songInfoUrl, cfg.fetchTimeout), fetchJson(cfg.bandIdUrl, cfg.fetchTimeout)]);
+      [songInfoJson, bandIdJson] = await Promise.all([fetchJson(ctx, cfg.songInfoUrl), fetchJson(ctx, cfg.bandIdUrl)]);
       //保存副本到本地
       //程序运行到此处已经成功读取了json
       // 写入文件(函数内已经做了异常处理)
