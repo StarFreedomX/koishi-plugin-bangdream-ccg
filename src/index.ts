@@ -3,6 +3,7 @@ import {exec} from "child_process";
 import * as XLSX from 'xlsx';
 import {} from '@koishijs/cache'
 import * as fs from 'fs'
+import {pathToFileURL} from "node:url";
 
 export const ccgLogger = new Logger('bangdream-ccg');
 
@@ -143,7 +144,6 @@ enum Servers {
 
 export interface Config {
   serverLimit: number;
-  //cd: number;
   audioLength: number;
   idGuess: boolean;
   saveJson: boolean;
@@ -154,12 +154,9 @@ export interface Config {
   songCover: boolean;
   songFileUrl: string
   nickname: boolean;
-  //fetchTimeout: number;
-  //nicknameUrl: string;
   //saveSongFile: boolean;
   defaultSongNameServer: number;
   FFmpegPath: string;
-  //devMode: boolean;
 }
 
 export const Config = Schema.intersect([
@@ -181,15 +178,12 @@ export const Config = Schema.intersect([
     //saveSongFile: Schema.boolean().default(false).description("是否保存歌曲到本地（会占用一定的存储空间，但可以使已下载歌曲无需再次下载，执行速度更快）"),
     saveJson: Schema.boolean().default(true).description("是否保存json至本地（这使得由于网络波动等原因获取json文件失败时，使用本地json）"),
     alwaysUseLocalJson: Schema.boolean().default(false).description("是否优先使用本地json"),
-    //fetchTimeout: Schema.number().default(15000).min(0).description('网络获取json超时时间(单位ms)'),
   }).description('基础配置'),
   Schema.object({
     FFmpegPath: Schema.string().description("FFmpeg路径，当控制台出现Pipe报错则需要手动配置，否则留空即可"),
     songInfoUrl: Schema.string().default("https://bestdori.com/api/songs/all.7.json").description("歌曲信息地址，默认url来源于bestdori.com"),
     bandIdUrl: Schema.string().default("https://bestdori.com/api/bands/all.1.json").description("乐队信息地址，默认url来源于bestdori.com"),
     songFileUrl: Schema.string().default("https://bestdori.com/assets/jp/sound/bgm{songId}_rip/bgm{songId}.mp3").description("歌曲下载地址，花括号内的songId对应实际的songId被替换"),
-    //nicknameUrl: Schema.string().default("https://github.com/Yamamoto-2/tsugu-bangdream-bot/raw/refs/heads/master/backend/config/nickname_song.xlsx").description("别名数据表来源，默认为Tsugu机器人仓库"),
-    //devMode: Schema.boolean().default(false).hidden(),
   }).description('高级配置'),
 
 ])
@@ -264,7 +258,7 @@ export function apply(ctx: Context, cfg: Config) {
             console.log(songWithoutCover);
           }
           //发送语音消息
-          const audio = h.audio(`${cacheUrl}/temp_${session.gid.replace(':', '_')}.mp3`)
+          const audio = h.audio(pathToFileURL(`${cacheUrl}/temp_${session.gid.replace(':', '_')}.mp3`).href)
           await sendMessagePromise;
           await session.send(audio);
           console.log('发送成功');
@@ -812,8 +806,17 @@ async function writeJSON(jsonString: string, path: string) {
  * @param endTime 结束时间字符串
  */
 async function trimAudio(FFmpegPath: string, input: string, output: string, startTime: string, endTime: string) {
-  const command = `${FFmpegPath} -i ${input} -ss ${startTime} -to ${endTime} -acodec pcm_s16le -c copy ${output} -y`;
+  const command = `${safeQuote(FFmpegPath)} -i "${input}" -ss ${startTime} -to ${endTime} -acodec pcm_s16le -c copy "${output}" -y`;
   await runCommand(command);
+}
+
+function safeQuote(path: string): string {
+  // 去除首尾空格，判断是否已经被双引号包裹
+  const trimmed = path.trim();
+  if (trimmed.startsWith('"') && trimmed.endsWith('"')) {
+    return trimmed;
+  }
+  return `"${trimmed}"`;
 }
 
 /**
