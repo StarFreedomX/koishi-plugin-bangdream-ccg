@@ -155,6 +155,7 @@ export interface Config {
   songCover: boolean;
   songFileUrl: string
   nickname: boolean;
+  refreshInterval: number;
   //saveSongFile: boolean;
   defaultSongNameServer: number;
   FFmpegPath: string;
@@ -170,7 +171,6 @@ export const Config = Schema.intersect([
       Schema.const(3).description('ZH_CN'),
       Schema.const(4).description('KR'),
     ]).default(0).description("默认歌曲名称服务器，显示答案时默认使用该项配置的服务器歌曲名称"),
-    //cd: Schema.number().default(5).description("冷却时间，建议设置为大于5s，否则可能预下载失败"),
     audioLength: Schema.number().default(5).description("发送音频的长度"),
     timeout: Schema.number().default(300).min(1).description("猜歌超时时间，单位秒"),
     idGuess: Schema.boolean().default(true).description("是否允许使用歌曲id猜歌"),
@@ -178,6 +178,7 @@ export const Config = Schema.intersect([
     songCover: Schema.boolean().default(true).description("是否在发送答案时显示歌曲封面"),
     //saveSongFile: Schema.boolean().default(false).description("是否保存歌曲到本地（会占用一定的存储空间，但可以使已下载歌曲无需再次下载，执行速度更快）"),
     saveJson: Schema.boolean().default(true).description("是否保存json至本地（这使得由于网络波动等原因获取json文件失败时，使用本地json）"),
+    refreshInterval: Schema.number().default(60*60).min(1).description('json刷新间隔，单位秒'),
     //alwaysUseLocalJson: Schema.boolean().default(false).description("是否优先使用本地json"),
   }).description('基础配置'),
   Schema.object({
@@ -231,7 +232,7 @@ export function apply(ctx: Context, cfg: Config) {
   // 定时获取
   let updateJSONs = setInterval(async () => {
     refreshJsons(ctx, cfg).then(() => {console.log(`[bangdream-ccg] JSON loaded.`)})
-  }, 60 * 60 * 1000);   // 1h
+  }, cfg.refreshInterval * 1000);   // 1h
 
   ctx.on('dispose', () => {
     clearInterval(updateJSONs);
