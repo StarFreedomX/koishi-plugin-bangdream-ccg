@@ -54,3 +54,7 @@ commands:
     clear:
       messages:
         delCompleted: '数据库缓存已清除！'
+    refresh:
+      messages:
+        refreshText: 'JSON刷新成功'
+        refresh-failed: '刷新失败，请检查日志'

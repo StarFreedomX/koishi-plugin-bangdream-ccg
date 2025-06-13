@@ -4,6 +4,7 @@ import * as XLSX from 'xlsx';
 import {} from '@koishijs/cache'
 import * as fs from 'fs'
 import {pathToFileURL} from "node:url";
+import {isBooleanObject} from "node:util/types";
 
 export const ccgLogger = new Logger('bangdream-ccg');
 
@@ -148,7 +149,7 @@ export interface Config {
   idGuess: boolean;
   saveJson: boolean;
   timeout: number;
-  alwaysUseLocalJson: boolean;
+  //alwaysUseLocalJson: boolean;
   songInfoUrl: string;
   bandIdUrl: string;
   songCover: boolean;
@@ -177,7 +178,7 @@ export const Config = Schema.intersect([
     songCover: Schema.boolean().default(true).description("是否在发送答案时显示歌曲封面"),
     //saveSongFile: Schema.boolean().default(false).description("是否保存歌曲到本地（会占用一定的存储空间，但可以使已下载歌曲无需再次下载，执行速度更快）"),
     saveJson: Schema.boolean().default(true).description("是否保存json至本地（这使得由于网络波动等原因获取json文件失败时，使用本地json）"),
-    alwaysUseLocalJson: Schema.boolean().default(false).description("是否优先使用本地json"),
+    //alwaysUseLocalJson: Schema.boolean().default(false).description("是否优先使用本地json"),
   }).description('基础配置'),
   Schema.object({
     FFmpegPath: Schema.string().description("FFmpeg路径，当控制台出现Pipe报错则需要手动配置，否则留空即可"),
@@ -194,6 +195,22 @@ const sharedContext: Map<string, {
   timer: () => void
 }> = new Map();
 
+interface JSONs {
+  songInfoJSON: JSON;
+  bandIdJSON: JSON;
+}
+
+const JSONs: JSONs = {
+  songInfoJSON: null,
+  bandIdJSON: null,
+}
+
+const devLog = (...data:any[]) => {
+  if (process.env.NODE_ENV === 'development'){
+    console.log(...data);
+  }
+}
+
 
 export function apply(ctx: Context, cfg: Config) {
   ctx.i18n.define('zh-CN', require('./locales/zh-CN'));
@@ -203,12 +220,22 @@ export function apply(ctx: Context, cfg: Config) {
   cacheUrl = `${ctx.baseDir}/cache/bangdream-ccg`;
   fs.mkdirSync(dataUrl, {recursive: true});
   fs.mkdirSync(cacheUrl, {recursive: true});
-  console.log('目录初始化成功');
+  devLog('目录初始化成功');
   if (fs.existsSync(`${assetsUrl}/nickname_song.xlsx`)) {
     fs.copyFileSync(`${assetsUrl}/nickname_song.xlsx`, `${dataUrl}/nickname_song.xlsx`);
     if (process.env.NODE_ENV !== "development")
       fs.rmSync(`${assetsUrl}/nickname_song.xlsx`);
   }
+
+  refreshJsons(ctx, cfg).then(() => {console.log(`[bangdream-ccg] JSON loaded.`)})
+  // 定时获取
+  let updateJSONs = setInterval(async () => {
+    refreshJsons(ctx, cfg).then(() => {console.log(`[bangdream-ccg] JSON loaded.`)})
+  }, 60 * 60 * 1000);   // 1h
+
+  ctx.on('dispose', () => {
+    clearInterval(updateJSONs);
+  })
 
 
   ctx.command("ccg [option:text]")
@@ -236,7 +263,7 @@ export function apply(ctx: Context, cfg: Config) {
           //判断缓存1是否有歌曲，如果没有，那么先生成在发送，存入缓存2；如果有，直接发送，并将缓存1的内容转移到缓存2
           let readySong: Song, JSONs: JSON[];
           const readySongPromise = ctx.cache.get(`bangdream_ccg_${session.gid}`, 'pre');
-          const JSONsPromise = initJson(ctx, cfg);  //初始化json
+          const JSONsPromise = getJSONs(ctx, cfg);  //初始化json
           const existCache = fs.existsSync(`${cacheUrl}/[full]temp_${gid}.mp3`) &&
             fs.existsSync(`${cacheUrl}/temp_${gid}.mp3`);
           [readySong, JSONs] = await Promise.all([readySongPromise, JSONsPromise]);
@@ -245,23 +272,22 @@ export function apply(ctx: Context, cfg: Config) {
             const song = await handleSong(JSONs, ctx, cfg, gid);
             //存入缓存2
             ctx.cache.set(`bangdream_ccg_${session.gid}`, 'run', song, Time.second * cfg.timeout + Time.minute * 5);
-            console.log("已存入缓存2:");
+            devLog("已存入缓存2:");
             const { songCover, ...songWithoutCover } = song;
-            console.log(songWithoutCover);
+            devLog(songWithoutCover);
           } else {
             //读取缓存1的内容
             const preSong: Song = await ctx.cache.get(`bangdream_ccg_${session.gid}`, 'pre');
             //存入缓存2
             ctx.cache.set(`bangdream_ccg_${session.gid}`, 'run', preSong, Time.second * cfg.timeout + Time.minute * 5);
-            console.log("已存入缓存2:");
+            devLog("已存入缓存2:");
             const { songCover, ...songWithoutCover } = preSong;
-            console.log(songWithoutCover);
+            devLog(songWithoutCover);
           }
           //发送语音消息
           const audio = h.audio(pathToFileURL(`${cacheUrl}/temp_${session.gid.replace(':', '_')}.mp3`).href)
           await sendMessagePromise;
           await session.send(audio);
-          console.log('发送成功');
 
 
           const dispose = ctx.channel(session.channelId).middleware(async (session, next) => {
@@ -325,9 +351,9 @@ export function apply(ctx: Context, cfg: Config) {
           //接下来需要处理的是缓存1，提前准备好下一次的题目
           const preSong = await handleSong(JSONs, ctx, cfg, gid);
           await ctx.cache.set(`bangdream_ccg_${session.gid}`, 'pre', preSong, Time.day);
-          console.log("已存入缓存1:");
+          devLog("已存入缓存1:");
           const { songCover, ...songWithoutCover } = preSong;
-          console.log(songWithoutCover);
+          devLog(songWithoutCover);
         } else {
           //已经开始，return结束
           return session.text('.alreadyRunning');
@@ -385,7 +411,7 @@ export function apply(ctx: Context, cfg: Config) {
       if ((!songId) || (!nickname)) {
         return session.text(".addOptionErr");
       }
-      const JSONs: JSON[] = await initJson(ctx, cfg)
+      const JSONs: JSON[] = await getJSONs(ctx, cfg)
       const songInfo: Song = await getSongInfoById(`${songId}`, JSONs[0], JSONs[1], ctx, cfg);
       if (!songInfo) {
         return session.text(".songNotFound", {songId: songId});
@@ -401,7 +427,7 @@ export function apply(ctx: Context, cfg: Config) {
       if ((!songId) || (!nickname)) {
         return session.text(".delOptionErr");
       }
-      const JSONs: JSON[] = await initJson(ctx, cfg)
+      const JSONs: JSON[] = await getJSONs(ctx, cfg)
       const songInfo: Song = await getSongInfoById(`${songId}`, JSONs[0], JSONs[1], ctx, cfg);
       if (!songInfo) {
         return session.text(".songNotFound", {songId: songId});
@@ -513,15 +539,23 @@ export function apply(ctx: Context, cfg: Config) {
       })
     })
 
+  ctx.command('ccg.refresh')
+    .action(async ({session}) => {
+      try{
+        await refreshJsons(ctx, cfg);
+      }catch(e){
+        console.error(e);
+        return session.text('.refresh-failed');
+      }
+      return session.text(".refreshText");
+    })
+
   //开发环境
   if (process.env.NODE_ENV === 'development') {
 
     ctx.command("test [option:text]")
       .action(async ({session}, option) => {
-        const [songInfoJson, bandIdJson] = await initJson(ctx, cfg);
-        const song = await getSongInfoById(option, songInfoJson, bandIdJson, ctx, cfg);
-        if (!song) return session.text("commands.ccg.add.messages.songNotFound", {songId: option});
-        return `${song.songId}\n${song.songName}\n${song.bandName}\n${song.answers}\n${h.image(song.songCover)}`;
+
       });
 
     ctx.command('ccg.combine')
@@ -558,7 +592,7 @@ export function apply(ctx: Context, cfg: Config) {
             } else {
               appendSong.Nickname = nickname;
             }
-            console.log(`已合并:${nickname} to ${songId} - ${title}`);
+            devLog(`已合并:${nickname} to ${songId} - ${title}`);
           } else {
             const index = nicknameJson.findIndex(item => item.Id > songId);
             let appending: nicknameExcelElement = {
@@ -573,7 +607,7 @@ export function apply(ctx: Context, cfg: Config) {
               // 否则，在找到的位置插入新对象
               nicknameJson.splice(index, 0, appending);
             }
-            console.log(`已合并:${nickname} to ${songId} - ${title}`);
+            devLog(`已合并:${nickname} to ${songId} - ${title}`);
           }
           const newWorksheet = XLSX.utils.json_to_sheet(nicknameJson, {skipHeader: false});
           //const workbook = XLSX.utils.book_new();
@@ -605,13 +639,14 @@ export function apply(ctx: Context, cfg: Config) {
                   ?.some(itemTsugu => betterCompare(itemTsugu, itemCcg))
               );
           if (change?.length) {
-            //console.log(change);
-            console.log(`#${elementCcg.Id} - ${elementCcg.Title} - 添加: ${change}`);
+            devLog(`#${elementCcg.Id} - ${elementCcg.Title} - 添加: ${change}`);
           }
         }
 
       })
   }
+
+
 }
 
 /**
@@ -658,7 +693,7 @@ async function getSongInfoById(selectedKey: string, songInfoJson: JSON, bandIdJs
             base
           }-${selectedSong["jacketImage"][0]}-jacket.png`;
           arrayBuffer = Buffer.from(await ctx.http.get(url, {responseType: 'arraybuffer'}));
-          console.log(`musicjacket: ${url}`)
+          devLog(`musicjacket: ${url}`)
           if (arrayBuffer.toString().startsWith("<!DOCTYPE html>")){
             arrayBuffer = null;
           }
@@ -748,8 +783,7 @@ async function getRandomSong(songInfoJson: JSON, bandIdJson: JSON, ctx:Context, 
  * @param url json文件的url
  */
 async function fetchJson(ctx: Context, url: string): Promise<JSON> {
-  console.log(url);
-  return ctx.http.get(url, {responseType: 'json',timeout: 10000})
+  return ctx.http.get(url, {responseType: 'json', timeout: 10000})
 }
 
 
@@ -1079,9 +1113,34 @@ async function delNickName(songId: number, nickname: string, songInfo: Song) {
  * 初始化，根据配置获取对应json
  * @param ctx
  * @param cfg 配置表单
+ * @param retryTimes
  */
-async function initJson(ctx: Context, cfg: Config) {
-  let songInfoJson: JSON;
+async function getJSONs(ctx: Context, cfg: Config, retryTimes = 3) {
+  if (retryTimes<0) return;
+  if (JSONs.songInfoJSON && JSONs.songInfoJSON){
+    return [JSONs.songInfoJSON, JSONs.bandIdJSON];
+  }else{
+     const [songInfoJSONStr, bandIdJSONStr] = await Promise.all([fs.promises.readFile(`${dataUrl}/songInfo.json`, 'utf-8'),
+     fs.promises.readFile(`${dataUrl}/bandId.json`, 'utf-8')]);
+     let songInfoJSON: JSON ,bandIdJSON: JSON;
+    try {
+      songInfoJSON = JSON.parse(songInfoJSONStr.trim() || "{}");
+      bandIdJSON = JSON.parse(bandIdJSONStr.trim() || "{}");
+    } catch (e) {
+      ccgLogger.error(`json格式错误`);
+      ccgLogger.error(e);
+    }
+    const isEmpty = Object.keys(songInfoJSON).length * Object.keys(songInfoJSON).length === 0;
+    if (isEmpty) {
+      await refreshJsons(ctx, cfg);
+      return getJSONs(ctx, cfg, retryTimes-1);
+    }
+    return [songInfoJSON, bandIdJSON];
+
+  }
+
+
+  /*let songInfoJson: JSON;
   let bandIdJson: JSON;
   //json处理操作
   if (cfg.alwaysUseLocalJson) {
@@ -1132,7 +1191,24 @@ async function initJson(ctx: Context, cfg: Config) {
       }
     }
   }
-  return [songInfoJson, bandIdJson];
+  return [songInfoJson, bandIdJson];*/
+}
+
+async function refreshJsons(ctx: Context, cfg: Config) {
+  //获取json
+  const [songInfoJson, bandIdJson] = await Promise.all([fetchJson(ctx, cfg.songInfoUrl), fetchJson(ctx, cfg.bandIdUrl)]);
+  //程序运行到此处已经成功读取了json
+  JSONs.songInfoJSON = songInfoJson;
+  JSONs.bandIdJSON = bandIdJson;
+  //保存副本到本地
+  // 写入文件(函数内已经做了异常处理)
+  if (cfg.saveJson) {
+    await Promise.all([
+      writeJSON(JSON.stringify(songInfoJson), `${dataUrl}/songInfo.json`),
+      writeJSON(JSON.stringify(bandIdJson), `${dataUrl}/bandId.json`)
+    ]);
+  }
+
 }
 
 /**
