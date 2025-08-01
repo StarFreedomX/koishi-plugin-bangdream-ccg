@@ -88,7 +88,7 @@ export const usage = `
 <br/>
 <br/>
 <h2>Advanced</h2>
-关于配置项songFileId,占位符如下：<br/>
+关于配置项songFileURL,占位符如下：<br/>
 {songName}=>歌曲名<br/>
 {songId}=>歌曲id<br/>
 {bandName}=>乐队名<br/>

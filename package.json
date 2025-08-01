@@ -33,7 +33,9 @@
       "en": "BanG Dream Song Guess Game",
       "zh": "邦多利猜猜歌，支持缓存和别名机制"
     },
-    "service": {},
+    "service": {
+      "required": ["cache"]
+    },
     "hidden": false
   },
   "dependencies": {
