@@ -84,6 +84,7 @@ export const usage = `
 <h4>如果想继续开发优化本插件，<a href="https://github.com/StarFreedomX/koishi-plugin-bangdream-ccg/pulls" target="_blank">欢迎 PR</a></h4>
 <h2>Notice</h2>
 * 本项目需提前安装并配置FFmpeg<br/>
+* 若使用的平台为非NapCatQQ，请安装<a href="/market?keyword=koishi-plugin-silk">silk插件</a>确保音频能被成功发送(NapCat自带silk转换)<br/>
 * 如果遇到[Koishi数据文件夹]/data/bangdream-ccg/中的nickname_song.xlsx丢失需要自行到本仓库下载<br/>
 <br/>
 <br/>
@@ -692,7 +693,7 @@ async function getSongInfoById(selectedKey: string, songInfoJson: JSON, bandIdJs
             base
           }_rip/assets-star-forassetbundle-startapp-musicjacket-musicjacket${
             base
-          }-${selectedSong["jacketImage"][0]}-jacket.png`;
+          }-${selectedSong["jacketImage"].at(-1)}-jacket.png`;
           arrayBuffer = Buffer.from(await ctx.http.get(url, {responseType: 'arraybuffer'}));
           devLog(`musicjacket: ${url}`)
           if (arrayBuffer.toString().startsWith("<!DOCTYPE html>")){
