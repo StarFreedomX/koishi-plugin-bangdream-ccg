@@ -160,6 +160,7 @@ export interface Config {
   //saveSongFile: boolean;
   defaultSongNameServer: number;
   FFmpegPath: string;
+  sendAudioMode: 'path' | 'base64';
 }
 
 export const Config = Schema.intersect([
@@ -183,6 +184,10 @@ export const Config = Schema.intersect([
     //alwaysUseLocalJson: Schema.boolean().default(false).description("是否优先使用本地json"),
   }).description('基础配置'),
   Schema.object({
+    sendAudioMode: Schema.union([
+      Schema.const('path'),
+      Schema.const('base64'),
+    ]).description("音频文件发送模式，如果对接适配器机器不同请选择base64"),
     FFmpegPath: Schema.string().description("FFmpeg路径，当控制台出现Pipe报错则需要手动配置，否则留空即可"),
     songInfoUrl: Schema.string().default("https://bestdori.com/api/songs/all.7.json").description("歌曲信息地址，默认url来源于bestdori.com"),
     bandIdUrl: Schema.string().default("https://bestdori.com/api/bands/all.1.json").description("乐队信息地址，默认url来源于bestdori.com"),
@@ -255,114 +260,116 @@ export function apply(ctx: Context, cfg: Config) {
 
       //没有带参数，进入启动流程
       if (!option) {
-        //start
-        const gid = session.gid.replace(/:/g, '_');
-        //获取是否在进行中
-        let runSongInfo = await ctx.cache.get(`bangdream_ccg_${session.gid}`, 'run');
-        if (!runSongInfo || runSongInfo.isComplete) {
-          //进入启动流程
-          const sendMessagePromise = session.send("语音发送中...");
-          //判断缓存1是否有歌曲，如果没有，那么先生成在发送，存入缓存2；如果有，直接发送，并将缓存1的内容转移到缓存2
-          let readySong: Song, JSONs: JSON[];
-          const readySongPromise = ctx.cache.get(`bangdream_ccg_${session.gid}`, 'pre');
-          const JSONsPromise = getJSONs(ctx, cfg);  //初始化json
-          const existCache = fs.existsSync(`${cacheUrl}/[full]temp_${gid}.mp3`) &&
-            fs.existsSync(`${cacheUrl}/temp_${gid}.mp3`);
-          [readySong, JSONs] = await Promise.all([readySongPromise, JSONsPromise]);
-          //初始化缓存2
-          if (!readySong || !existCache) { //这里没有获取到缓存1的内容或者缓存文件已经不存在，那么需要生成一个直接放到缓存2
-            const song = await handleSong(JSONs, ctx, cfg, gid);
-            //存入缓存2
-            ctx.cache.set(`bangdream_ccg_${session.gid}`, 'run', song, Time.second * cfg.timeout + Time.minute * 5);
-            devLog("已存入缓存2:");
-            const { songCover, ...songWithoutCover } = song;
-            devLog(songWithoutCover);
-          } else {
-            //读取缓存1的内容
-            const preSong: Song = await ctx.cache.get(`bangdream_ccg_${session.gid}`, 'pre');
-            //存入缓存2
-            ctx.cache.set(`bangdream_ccg_${session.gid}`, 'run', preSong, Time.second * cfg.timeout + Time.minute * 5);
-            devLog("已存入缓存2:");
-            const { songCover, ...songWithoutCover } = preSong;
-            devLog(songWithoutCover);
-          }
-          //发送语音消息
-          const audio = h.audio(pathToFileURL(`${cacheUrl}/temp_${session.gid.replace(':', '_')}.mp3`).href)
-          await sendMessagePromise;
-          await session.send(audio);
 
-
-          const dispose = ctx.channel(session.channelId).middleware(async (session, next) => {
-            const readySong = await ctx.cache.get(`bangdream_ccg_${session.gid}`, 'run');
-            if (!readySong || readySong.isComplete) {
-              const dispose = sharedContext.get(session.gid);
-              dispose?.timer();
-              dispose?.listener();
-              sharedContext.delete(session.gid);
-              return next();
-            } else if (readySong.answers.some(alias => betterCompare(alias, session.content))) {
-              const dispose = sharedContext.get(session.gid);
-              dispose?.timer();
-              dispose?.listener();
-              sharedContext.delete(session.gid);
-              await Promise.all([
-                ctx.cache.delete(`bangdream_ccg_${session.gid}`, 'run'),
-                session.send(session.text("commands.ccg.messages.answer", {
-                  quote: h.quote(session.messageId),
-                  songCover: readySong.songCover ? h.image(readySong.songCover) : '',
-                  selectedKey: readySong.songId,
-                  selectedBandName: readySong.bandName,
-                  selectedSongName: readySong.songName,
-                  answers: readySong.answers.toString(),
-                  selectedSecond: readySong.selectedSecond,
-                }))
-              ])
-            } else {
-              return next();
-            }
-          })
-
-          //计时器，特定时间后执行回调函数实现超时自动输出答案
-          const disposeTimer = ctx.setTimeout(async () => {
-            let readySong: Song = await ctx.cache.get(`bangdream_ccg_${session.gid}`, 'run');
-            if (readySong && !readySong.isComplete) {
-              const dispose = sharedContext.get(session.gid);
-              dispose?.listener();
-              sharedContext.delete(session.gid);
-              await Promise.all([ctx.cache.delete(`bangdream_ccg_${session.gid}`, 'run'),
-                session.send(session.text("commands.ccg.messages.timeout", {
-                  songCover: readySong.songCover ? h.image(readySong.songCover) : '',
-                  selectedKey: readySong.songId,
-                  selectedBandName: readySong.bandName,
-                  selectedSongName: readySong.songName,
-                  answers: readySong.answers.toString(),
-                  selectedSecond: readySong.selectedSecond,
-                }))
-              ])
-            }
-          }, cfg.timeout * 1000);
-
-          // 存储到共享上下文中
-          sharedContext.set(session.gid, {
-            listener: dispose,
-            timer: disposeTimer,
-          });
-
-
-          //这里已经发送完毕，缓存2已经准备好了题目的信息
-          //接下来需要处理的是缓存1，提前准备好下一次的题目
-          const preSong = await handleSong(JSONs, ctx, cfg, gid);
-          await ctx.cache.set(`bangdream_ccg_${session.gid}`, 'pre', preSong, Time.day);
-          devLog("已存入缓存1:");
-          const { songCover, ...songWithoutCover } = preSong;
-          devLog(songWithoutCover);
-        } else {
-          //已经开始，return结束
-          return session.text('.alreadyRunning');
-        }
       } else {
 
       }
+      //start
+      const gid = session.gid.replace(/:/g, '_');
+      //获取是否在进行中
+      let runSongInfo = await ctx.cache.get(`bangdream_ccg_${session.gid}`, 'run');
+      if (!runSongInfo || runSongInfo.isComplete) {
+        //进入启动流程
+        const sendMessagePromise = session.send("语音发送中...");
+        //判断缓存1是否有歌曲，如果没有，那么先生成在发送，存入缓存2；如果有，直接发送，并将缓存1的内容转移到缓存2
+        let readySong: Song, JSONs: JSON[];
+        const readySongPromise = ctx.cache.get(`bangdream_ccg_${session.gid}`, 'pre');
+        const JSONsPromise = getJSONs(ctx, cfg);  //初始化json
+        const existCache = fs.existsSync(`${cacheUrl}/[full]temp_${gid}.mp3`) &&
+          fs.existsSync(`${cacheUrl}/temp_${gid}.mp3`);
+        [readySong, JSONs] = await Promise.all([readySongPromise, JSONsPromise]);
+        //初始化缓存2
+        if (!readySong || !existCache) { //这里没有获取到缓存1的内容或者缓存文件已经不存在，那么需要生成一个直接放到缓存2
+          const song = await handleSong(JSONs, ctx, cfg, gid);
+          //存入缓存2
+          ctx.cache.set(`bangdream_ccg_${session.gid}`, 'run', song, Time.second * cfg.timeout + Time.minute * 5);
+          devLog("已存入缓存2:");
+          const { songCover, ...songWithoutCover } = song;
+          devLog(songWithoutCover);
+        } else {
+          //读取缓存1的内容
+          const preSong: Song = await ctx.cache.get(`bangdream_ccg_${session.gid}`, 'pre');
+          //存入缓存2
+          ctx.cache.set(`bangdream_ccg_${session.gid}`, 'run', preSong, Time.second * cfg.timeout + Time.minute * 5);
+          devLog("已存入缓存2:");
+          const { songCover, ...songWithoutCover } = preSong;
+          devLog(songWithoutCover);
+        }
+        //发送语音消息
+        const audio = h.audio(preProcessAudio(`${cacheUrl}/temp_${session.gid.replace(':', '_')}.mp3`, cfg))
+        await sendMessagePromise;
+        await session.send(audio);
+
+
+        const dispose = ctx.channel(session.channelId).middleware(async (session, next) => {
+          const readySong = await ctx.cache.get(`bangdream_ccg_${session.gid}`, 'run');
+          if (!readySong || readySong.isComplete) {
+            const dispose = sharedContext.get(session.gid);
+            dispose?.timer();
+            dispose?.listener();
+            sharedContext.delete(session.gid);
+            return next();
+          } else if (readySong.answers.some(alias => betterCompare(alias, session.content))) {
+            const dispose = sharedContext.get(session.gid);
+            dispose?.timer();
+            dispose?.listener();
+            sharedContext.delete(session.gid);
+            await Promise.all([
+              ctx.cache.delete(`bangdream_ccg_${session.gid}`, 'run'),
+              session.send(session.text("commands.ccg.messages.answer", {
+                quote: h.quote(session.messageId),
+                songCover: readySong.songCover ? h.image(readySong.songCover) : '',
+                selectedKey: readySong.songId,
+                selectedBandName: readySong.bandName,
+                selectedSongName: readySong.songName,
+                answers: readySong.answers.toString(),
+                selectedSecond: readySong.selectedSecond,
+              }))
+            ])
+          } else {
+            return next();
+          }
+        })
+
+        //计时器，特定时间后执行回调函数实现超时自动输出答案
+        const disposeTimer = ctx.setTimeout(async () => {
+          let readySong: Song = await ctx.cache.get(`bangdream_ccg_${session.gid}`, 'run');
+          if (readySong && !readySong.isComplete) {
+            const dispose = sharedContext.get(session.gid);
+            dispose?.listener();
+            sharedContext.delete(session.gid);
+            await Promise.all([ctx.cache.delete(`bangdream_ccg_${session.gid}`, 'run'),
+              session.send(session.text("commands.ccg.messages.timeout", {
+                songCover: readySong.songCover ? h.image(readySong.songCover) : '',
+                selectedKey: readySong.songId,
+                selectedBandName: readySong.bandName,
+                selectedSongName: readySong.songName,
+                answers: readySong.answers.toString(),
+                selectedSecond: readySong.selectedSecond,
+              }))
+            ])
+          }
+        }, cfg.timeout * 1000);
+
+        // 存储到共享上下文中
+        sharedContext.set(session.gid, {
+          listener: dispose,
+          timer: disposeTimer,
+        });
+
+
+        //这里已经发送完毕，缓存2已经准备好了题目的信息
+        //接下来需要处理的是缓存1，提前准备好下一次的题目
+        const preSong = await handleSong(JSONs, ctx, cfg, gid);
+        await ctx.cache.set(`bangdream_ccg_${session.gid}`, 'pre', preSong, Time.day);
+        devLog("已存入缓存1:");
+        const { songCover, ...songWithoutCover } = preSong;
+        devLog(songWithoutCover);
+      } else {
+        //已经开始，return结束
+        return session.text('.alreadyRunning');
+      }
+
 
     });
 
@@ -764,11 +771,18 @@ async function getSongInfoById(selectedKey: string, songInfoJson: JSON, bandIdJs
  * @param bandIdJson 乐队信息json
  * @param ctx Context
  * @param cfg 配置表单
+ * @param limit 筛选
  */
-async function getRandomSong(songInfoJson: JSON, bandIdJson: JSON, ctx:Context, cfg: Config): Promise<Song> {
+async function getRandomSong(songInfoJson: JSON, bandIdJson: JSON, ctx:Context, cfg: Config, limit?:string): Promise<Song> {
   let selectedKey: string;
   //筛选服务器
   const serverIndexes = [0, 1, 2, 3, 4].filter(i => ((cfg.serverLimit >> i) & 1));
+  const filter = {
+    band:undefined,
+  }
+  const rule = {
+
+  }
   do {
     selectedKey = Random.pick(Object.keys(songInfoJson))
     const titles = songInfoJson?.[selectedKey]?.['musicTitle'];
@@ -861,9 +875,10 @@ function safeQuote(path: string): string {
  * @param ctx Context
  * @param cfg Config
  * @param gid session的gid
+ * @param limit 歌曲条件限制
  */
-async function handleSong(JSONs: JSON[], ctx: Context, cfg: Config, gid: string) {
-  const song = await getRandomSong(JSONs[0], JSONs[1], ctx, cfg);  //随机获取一首歌
+async function handleSong(JSONs: JSON[], ctx: Context, cfg: Config, gid: string, limit?: string) {
+  const song = await getRandomSong(JSONs[0], JSONs[1], ctx, cfg, limit);  //随机获取一首歌
   //转换为实际歌曲文件地址
   const songFileUrl = turnSongFileUrl(song, cfg);
   //保存文件
@@ -1209,6 +1224,18 @@ async function refreshJsons(ctx: Context, cfg: Config) {
       writeJSON(JSON.stringify(songInfoJson), `${dataUrl}/songInfo.json`),
       writeJSON(JSON.stringify(bandIdJson), `${dataUrl}/bandId.json`)
     ]);
+  }
+
+}
+
+function preProcessAudio(path: string, cfg: Config) {
+  if (cfg.sendAudioMode === 'path') {
+    return pathToFileURL(path).href;
+  }
+  else if (cfg.sendAudioMode === 'base64'){
+    const fileBuffer = fs.readFileSync(path);
+    const base64Data = fileBuffer.toString("base64");
+    return `data:audio/mpeg;base64,${base64Data}`;
   }
 
 }
