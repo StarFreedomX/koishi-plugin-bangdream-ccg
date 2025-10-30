@@ -187,7 +187,7 @@ export const Config = Schema.intersect([
     sendAudioMode: Schema.union([
       Schema.const('path'),
       Schema.const('base64'),
-    ]).description("音频文件发送模式，如果对接适配器机器不同请选择base64"),
+    ]).default('path').description("音频文件发送模式，如果对接适配器机器不同请选择base64"),
     FFmpegPath: Schema.string().description("FFmpeg路径，当控制台出现Pipe报错则需要手动配置，否则留空即可"),
     songInfoUrl: Schema.string().default("https://bestdori.com/api/songs/all.7.json").description("歌曲信息地址，默认url来源于bestdori.com"),
     bandIdUrl: Schema.string().default("https://bestdori.com/api/bands/all.1.json").description("乐队信息地址，默认url来源于bestdori.com"),
@@ -1231,8 +1231,7 @@ async function refreshJsons(ctx: Context, cfg: Config) {
 function preProcessAudio(path: string, cfg: Config) {
   if (cfg.sendAudioMode === 'path') {
     return pathToFileURL(path).href;
-  }
-  else if (cfg.sendAudioMode === 'base64'){
+  } else {
     const fileBuffer = fs.readFileSync(path);
     const base64Data = fileBuffer.toString("base64");
     return `data:audio/mpeg;base64,${base64Data}`;
