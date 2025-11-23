@@ -1,10 +1,11 @@
-import {Context, h, Random, Schema, Time, Logger} from 'koishi'
-import {exec} from "child_process";
+import { Context, h, Random, Schema, Time, Logger } from 'koishi'
+import { exec } from "child_process";
 import * as XLSX from 'xlsx';
 import {} from '@koishijs/cache'
 import * as fs from 'fs'
-import {pathToFileURL} from "node:url";
-import {isBooleanObject} from "node:util/types";
+import { pathToFileURL } from "node:url";
+import path from "node:path";
+import pkg from '../package.json';
 
 export const ccgLogger = new Logger('bangdream-ccg');
 
@@ -98,9 +99,6 @@ export const usage = `
 <h2>Thanks</h2>
 <h4>开发过程中参考插件<a href="/market?keyword=koishi-plugin-cck">koishi-plugin-cck</a>(作者kumoSleeping)</h4>
 `
-
-export const assetsUrl: string = `${__dirname}/../assets`;
-
 export let cacheUrl: string;
 export let dataUrl: string;
 
@@ -221,19 +219,7 @@ const devLog = (...data:any[]) => {
 
 export function apply(ctx: Context, cfg: Config) {
   ctx.i18n.define('zh-CN', require('./locales/zh-CN'));
-
-  //初始化，检测当前的应用目录
-  dataUrl = `${ctx.baseDir}/data/bangdream-ccg`;
-  cacheUrl = `${ctx.baseDir}/cache/bangdream-ccg`;
-  fs.mkdirSync(dataUrl, {recursive: true});
-  fs.mkdirSync(cacheUrl, {recursive: true});
-  devLog('目录初始化成功');
-  if (fs.existsSync(`${assetsUrl}/nickname_song.xlsx`)) {
-    fs.copyFileSync(`${assetsUrl}/nickname_song.xlsx`, `${dataUrl}/nickname_song.xlsx`);
-    if (process.env.NODE_ENV !== "development")
-      fs.rmSync(`${assetsUrl}/nickname_song.xlsx`);
-  }
-
+  initAssets();
   refreshJsons(ctx, cfg).then(() => {console.log(`[bangdream-ccg] JSON loaded.`)})
   // 定时获取
   let updateJSONs = setInterval(async () => {
@@ -655,6 +641,36 @@ export function apply(ctx: Context, cfg: Config) {
       })
   }
 
+  function initAssets() {
+    const defaultAssetsDir = path.join(__dirname, '../assets');
+    //初始化，检测当前的应用目录
+    dataUrl = `${ctx.baseDir}/data/bangdream-ccg`;
+    cacheUrl = `${ctx.baseDir}/cache/bangdream-ccg`;
+    fs.mkdirSync(dataUrl, {recursive: true});
+    fs.mkdirSync(cacheUrl, {recursive: true});
+
+    const versionFile = path.join(dataUrl, 'plugin_version.json');
+
+    let localVersion = '0';
+    if (fs.existsSync(versionFile)) {
+      try {
+        localVersion = JSON.parse(fs.readFileSync(versionFile, 'utf-8')).version || '0';
+      } catch {}
+    }
+
+    const pluginVersion = pkg.version;
+
+    if (pluginVersion > localVersion) {
+      try {
+        if (fs.existsSync(defaultAssetsDir)) {
+          fs.cpSync(defaultAssetsDir, dataUrl, { recursive: true, force: true });
+        }
+        fs.writeFileSync(versionFile, JSON.stringify({ version: pluginVersion }));
+      } catch (err) {
+        console.error('initAssets copy failed:', err);
+      }
+    }
+  }
 
 }
 
@@ -1157,58 +1173,6 @@ async function getJSONs(ctx: Context, cfg: Config, retryTimes = 3) {
   }
 
 
-  /*let songInfoJson: JSON;
-  let bandIdJson: JSON;
-  //json处理操作
-  if (cfg.alwaysUseLocalJson) {
-    try {
-      songInfoJson = require(`${dataUrl}/songInfo.json`);
-      bandIdJson = require(`${dataUrl}/bandId.json`);
-    } catch (e) {
-      ccgLogger.error("读取本地json文件异常，将从远程仓库获取");
-      ccgLogger.error(e);
-      try {
-        [songInfoJson, bandIdJson] = await Promise.all([fetchJson(ctx, cfg.songInfoUrl), fetchJson(ctx, cfg.bandIdUrl)]);
-        if (cfg.saveJson) {
-          await Promise.all([
-            writeJSON(JSON.stringify(songInfoJson), `${dataUrl}/songInfo.json`),
-            writeJSON(JSON.stringify(bandIdJson), `${dataUrl}/bandId.json`)
-          ]);
-        }
-      } catch (e) {
-        ccgLogger.error("远程Json文件获取异常");
-        ccgLogger.error(e);
-      }
-
-    }
-  } else {
-    try {
-      //获取json
-      [songInfoJson, bandIdJson] = await Promise.all([fetchJson(ctx, cfg.songInfoUrl), fetchJson(ctx, cfg.bandIdUrl)]);
-      //保存副本到本地
-      //程序运行到此处已经成功读取了json
-      // 写入文件(函数内已经做了异常处理)
-      if (cfg.saveJson) {
-        await Promise.all([
-          writeJSON(JSON.stringify(songInfoJson), `${dataUrl}/songInfo.json`),
-          writeJSON(JSON.stringify(bandIdJson), `${dataUrl}/bandId.json`)
-        ]);
-      }
-    } catch (e) {
-      ccgLogger.error("远程Json文件获取异常，将使用本地json(若反复出现网络问题，建议打开配置项的alwaysUseLocalJson)");
-      ccgLogger.error(e);
-      try {
-        //这个json在正常运行时不变，所以直接require
-        songInfoJson = require(`${dataUrl}/songInfo.json`);
-        bandIdJson = require(`${dataUrl}/bandId.json`);
-      } catch (e) {
-        ccgLogger.error("读取本地json文件异常");
-        ccgLogger.error(e);
-        return;
-      }
-    }
-  }
-  return [songInfoJson, bandIdJson];*/
 }
 
 async function refreshJsons(ctx: Context, cfg: Config) {
@@ -1287,6 +1251,7 @@ function betterDistinguish(str: string) {
   })
   return str;
 }
+
 
 function betterCompare(str1: string, str2: string): boolean {
   return betterDistinguish(str1) == betterDistinguish(str2);
