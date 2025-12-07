@@ -555,7 +555,7 @@ export function apply(ctx: Context, cfg: Config) {
 
     ctx.command('ccg.combine')
       .action(async ({session}) => {
-
+        console.log('combining...')
         const jsonStr = await fs.promises.readFile(dataUrl + '/nicknameLocal.json', 'utf-8');
         const jsonJson = JSON.parse(jsonStr.trim() || "{}");
 
@@ -569,12 +569,16 @@ export function apply(ctx: Context, cfg: Config) {
         // 将工作表转换为JSON并返回
         const nicknameJson: nicknameExcelElement[] = XLSX.utils.sheet_to_json(worksheet);
 
+        // console.log(keys)
+
         for (const key of keys) {
           const songId = Number(key);
           const title = jsonJson?.[key]?.title;
           let nickname = jsonJson?.[key]?.nicknames?.join(',');
           const nicknames: string[] = jsonJson?.[key]?.nicknames;
           let appendSong = nicknameJson.find(item => item.Id == songId);
+
+          // console.log(appendSong);
 
           if (appendSong) {
             if (appendSong.Nickname) {
@@ -587,6 +591,7 @@ export function apply(ctx: Context, cfg: Config) {
             } else {
               appendSong.Nickname = nickname;
             }
+
             devLog(`已合并:${nickname} to ${songId} - ${title}`);
           } else {
             const index = nicknameJson.findIndex(item => item.Id > songId);
@@ -616,7 +621,9 @@ export function apply(ctx: Context, cfg: Config) {
           //列宽
           newWorksheet['!cols'].push({wch: 10}, {wch: 50}, {wch: 65}, {wch: 55});
           XLSX.writeFile(workbook, `${dataUrl}/nickname_song.xlsx`)
+
         }
+        console.log('finish.')
       })
 
     //对比xlsx，开发用
