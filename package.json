@@ -1,45 +1,51 @@
 {
-  "name": "koishi-plugin-bangdream-ccg",
-  "description": "邦多利猜猜歌，支持缓存和别名机制",
-  "version": "1.6.1",
-  "contributors": [
-    "StarFreedomX <starfreedomx@outlook.com>"
-  ],
-  "main": "lib/index.js",
-  "typings": "lib/index.d.ts",
-  "files": [
-    "lib",
-    "dist",
-    "assets/nickname_song.xlsx"
-  ],
-  "license": "MIT",
-  "homepage": "https://github.com/StarFreedomX/koishi-plugin-bangdream-ccg",
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/StarFreedomX/koishi-plugin-bangdream-ccg.git"
-  },
-  "scripts": {},
-  "keywords": [
-    "chatbot",
-    "koishi",
-    "plugin",
-    "bangdream"
-  ],
-  "peerDependencies": {
-    "koishi": "^4.18.7"
-  },
-  "koishi": {
-    "description": {
-      "en": "BanG Dream Song Guess Game",
-      "zh": "邦多利猜猜歌，支持缓存和别名机制"
+    "name": "koishi-plugin-bangdream-ccg",
+    "description": "邦多利猜猜歌，支持缓存和别名机制",
+    "version": "1.7.1",
+    "contributors": [
+        "StarFreedomX <starfreedomx@outlook.com>"
+    ],
+    "main": "lib/index.js",
+    "typings": "lib/index.d.ts",
+    "files": [
+        "lib",
+        "dist",
+        "assets/nickname_song.xlsx"
+    ],
+    "license": "MIT",
+    "homepage": "https://github.com/StarFreedomX/koishi-plugin-bangdream-ccg",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/StarFreedomX/koishi-plugin-bangdream-ccg.git"
     },
-    "service": {
-      "required": ["cache"]
+    "scripts": {},
+    "keywords": [
+        "chatbot",
+        "koishi",
+        "plugin",
+        "bangdream"
+    ],
+    "peerDependencies": {
+        "koishi": "^4.18.7"
     },
-    "hidden": false
-  },
-  "dependencies": {
-    "@koishijs/cache": "^2.1.0",
-    "xlsx": "^0.18.5"
-  }
+    "koishi": {
+        "description": {
+            "en": "BanG Dream Song Guess Game",
+            "zh": "邦多利猜猜歌，支持缓存和别名机制"
+        },
+        "service": {
+            "required": [
+                "cache",
+                "ffmpeg"
+            ]
+        },
+        "hidden": false
+    },
+    "dependencies": {
+        "xlsx": "^0.18.5"
+    },
+    "devDependencies": {
+        "koishi-plugin-ffmpeg": "^1.1.0",
+        "@koishijs/cache": "^2.1.0"
+    }
 }
